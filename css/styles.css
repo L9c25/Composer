@@ -1207,50 +1207,44 @@ input:checked + .toggle-slider:before {
     align-items: center;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 8px 12px;
-    gap: 12px;
+    border-radius: 4px;
+    padding: 3px 8px;
+    gap: 8px;
+    min-height: 26px;
     transition: var(--transition);
 }
 
 .asset-list-row:hover {
     background: var(--bg-card-hover);
     border-color: var(--accent-emerald);
-    transform: translateX(2px);
+}
+
+.asset-list-row.selected {
+    background: rgba(16, 185, 129, 0.2) !important;
+    border-left: 3px solid var(--accent-green-bright);
+    color: #fff;
 }
 
 .list-col-type {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-}
-
-.list-col-play {
-    display: flex;
-    align-items: center;
+    font-size: 11px;
+    color: var(--accent-emerald);
 }
 
 .list-col-info {
     flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
 }
 
 .list-asset-name {
-    font-weight: 600;
-    color: #fff;
+    font-weight: 400;
+    color: #e5e7eb;
     font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.list-asset-path {
-    font-size: 10px;
-    color: var(--text-dim);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1259,22 +1253,22 @@ input:checked + .toggle-slider:before {
 .list-col-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
 }
 
 .list-dur-badge, .list-peak-badge {
-    font-size: 11px;
+    font-size: 10px;
     font-family: monospace;
-    color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 2px 6px;
-    border-radius: 4px;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 1px 5px;
+    border-radius: 3px;
 }
 
 .list-col-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 /* ==========================================================================

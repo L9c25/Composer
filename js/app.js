@@ -724,12 +724,21 @@ class ComposerApp {
                     html += `
                         <div class="composer-tree-row file-row ${isSelected ? 'selected' : ''}" data-file-path="${encodeURIComponent(fileAsset.path)}">
                             <span class="composer-fav-btn ${isFav ? 'active' : ''}" data-fav-path="${encodeURIComponent(fileAsset.path)}">
-                                <i class="${isFav ? 'fas' : 'far'} fa-star"></i>
+                                <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
                             </span>
                             <span class="composer-file-icon ${isAudio ? '' : 'overlay'}">
                                 <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}"></i>
                             </span>
                             <span class="composer-title">${fileAsset.name}</span>
+                            <div class="list-col-meta">
+                                <span class="list-dur-badge" id="dur-tree-${encodeURIComponent(fileAsset.path)}">--:--</span>
+                                ${isAudio ? `<span class="list-peak-badge" id="peak-tree-${encodeURIComponent(fileAsset.path)}">-.- dB</span>` : ''}
+                            </div>
+                            ${isAudio ? `
+                                <button class="btn-icon btn-cut-silence-tree" data-cut-path="${encodeURIComponent(fileAsset.path)}" title="Cortar Silêncio" style="color:var(--accent-red); width:22px; height:22px; font-size:10px; border:none; background:transparent;">
+                                    <i class="fas fa-scissors"></i>
+                                </button>
+                            ` : ''}
                         </div>
                     `;
                 });
@@ -760,10 +769,30 @@ class ComposerApp {
 
         // Bind File Selection (Click) & Double-Click Insert
         container.querySelectorAll('.composer-tree-row.file-row').forEach(row => {
+            var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
+            var asset = this.allAssets.find(a => a.path === fPath);
+
+            if (asset && asset.type === 'sfx') {
+                var durTag = row.querySelector(`#dur-tree-${encodeURIComponent(fPath)}`);
+                var peakTag = row.querySelector(`#peak-tree-${encodeURIComponent(fPath)}`);
+                var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
+                if (cached) {
+                    if (durTag) durTag.textContent = this.formatTime(cached.duration);
+                    if (peakTag) peakTag.textContent = `${cached.nativePeakDb} dB`;
+                    asset.procData = cached;
+                } else {
+                    window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
+                        var proc = window.audioEngine.processAudioBuffer(audioBuf);
+                        window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
+                        if (durTag) durTag.textContent = this.formatTime(proc.duration);
+                        if (peakTag) peakTag.textContent = `${proc.nativePeakDb} dB`;
+                        asset.procData = proc;
+                    }).catch(() => {});
+                }
+            }
+
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.composer-fav-btn')) return;
-                var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
-                var asset = this.allAssets.find(a => a.path === fPath);
+                if (e.target.closest('.composer-fav-btn') || e.target.closest('.btn-cut-silence-tree')) return;
                 if (asset) {
                     this.selectedAsset = asset;
                     // Highlight selected row
@@ -775,10 +804,34 @@ class ComposerApp {
             });
 
             row.addEventListener('dblclick', (e) => {
-                var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
-                var asset = this.allAssets.find(a => a.path === fPath);
                 if (asset) {
                     this.insertToTimeline(asset);
+                }
+            });
+        });
+
+        // Bind Cut Silence in Tree View
+        container.querySelectorAll('.btn-cut-silence-tree').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                var fPath = decodeURIComponent(btn.getAttribute('data-cut-path'));
+                var asset = this.allAssets.find(a => a.path === fPath);
+                if (asset && confirm(`Deseja cortar o silêncio do arquivo "${asset.name}" e salvar em formato WAV limpo?`)) {
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
+                    try {
+                        var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
+                        var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+                        var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
+                        asset.path = res.targetPath;
+                        asset.procData = res.procInfo;
+                        asset.mtime = Date.now();
+                        btn.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
+                        setTimeout(() => { btn.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
+                        this.renderFolderView(container);
+                    } catch (errCut) {
+                        alert("Erro ao cortar silêncio: " + errCut.message);
+                        btn.innerHTML = `<i class="fas fa-scissors"></i>`;
+                    }
                 }
             });
         });
@@ -791,6 +844,7 @@ class ComposerApp {
                 var isFav = window.cacheMgr.toggleFavorite(fPath);
                 btn.innerHTML = `<i class="${isFav ? 'fas' : 'far'} fa-star"></i>`;
                 btn.classList.toggle('active', isFav);
+                this.renderFoldersList();
             });
         });
     }
@@ -853,21 +907,16 @@ class ComposerApp {
 
             return `
                 <div class="asset-list-row" data-index="${idx}" data-path="${encodeURIComponent(asset.path)}">
-                    <div class="list-col-type">
-                        <i class="${isAudio ? 'fas fa-music' : 'fas fa-film'}" style="color:${isAudio ? 'var(--accent-emerald)' : 'var(--accent-cyan)'}"></i>
-                    </div>
+                    <span class="composer-fav-btn btn-fav ${isFav ? 'active' : ''}" data-fav-path="${encodeURIComponent(asset.path)}">
+                        <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
+                    </span>
 
-                    <div class="list-col-play">
-                        ${isAudio ? `
-                            <button class="btn-icon btn-play" title="Ouvir Preview">
-                                <i class="fas fa-play"></i>
-                            </button>
-                        ` : ''}
+                    <div class="list-col-type">
+                        <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}" style="color:${isAudio ? 'var(--accent-emerald)' : 'var(--accent-cyan)'}"></i>
                     </div>
 
                     <div class="list-col-info">
                         <span class="list-asset-name" title="${asset.name}">${asset.name}</span>
-                        <span class="list-asset-path" title="${asset.path}">${asset.path}</span>
                     </div>
 
                     <div class="list-col-meta">
@@ -876,19 +925,11 @@ class ComposerApp {
                     </div>
 
                     <div class="list-col-actions">
-                        <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" title="Favorito">
-                            <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
-                        </button>
-                        
                         ${isAudio ? `
-                            <button class="btn-icon btn-cut-silence" title="Cortar Silêncio e Substituir Arquivo" style="color:var(--accent-red);">
+                            <button class="btn-icon btn-cut-silence" title="Cortar Silêncio e Substituir Arquivo" style="color:var(--accent-red); width:24px; height:24px; font-size:11px; border:none; background:transparent;">
                                 <i class="fas fa-scissors"></i>
                             </button>
                         ` : ''}
-
-                        <button class="btn-insert" title="Inserir na Timeline do Premiere">
-                            <i class="fas fa-plus"></i> Inserir
-                        </button>
                     </div>
                 </div>
             `;
