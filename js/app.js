@@ -587,62 +587,12 @@ class ComposerApp {
     /**
      * Main View Dispatcher (Grid, List, Folder Tree)
      */
-    renderCurrentView(isAppend = false) {
+    renderCurrentView() {
         var container = document.getElementById('grid-assets');
-        var breadcrumbBox = document.getElementById('breadcrumb-container');
-        var sectionTitle = document.getElementById('section-title');
-        var countDisplay = document.getElementById('asset-count-display');
-
         if (!container) return;
 
-        if (countDisplay) {
-            countDisplay.textContent = `${this.filteredAssets.length.toLocaleString()} itens`;
-        }
-
-        // Handle Folder Navigation Header & Breadcrumbs
-        if (this.viewMode === 'folder') {
-            if (breadcrumbBox) {
-                breadcrumbBox.style.display = 'flex';
-                this.renderBreadcrumbs();
-            }
-            if (sectionTitle) sectionTitle.textContent = "Navegador por Pastas";
-            
-            this.renderFolderView(container);
-            return;
-        } else {
-            if (breadcrumbBox) breadcrumbBox.style.display = 'none';
-            if (sectionTitle) {
-                if (this.selectedSidebarFolder) {
-                    var pathLib = typeof require !== 'undefined' ? require('path') : null;
-                    var folderName = pathLib ? pathLib.basename(this.selectedSidebarFolder) : this.selectedSidebarFolder.split(/[\/\\]/).pop();
-                    sectionTitle.textContent = `Pasta: ${folderName}`;
-                } else {
-                    sectionTitle.textContent = this.viewMode === 'list' ? "Lista de Assets" : "Navegador de Assets";
-                }
-            }
-        }
-
-        var visibleSlice = this.filteredAssets.slice(0, this.renderedCount);
-
-        if (visibleSlice.length === 0) {
-            container.className = 'grid-assets';
-            container.innerHTML = `
-                <div class="empty-state" style="grid-column: 1 / -1;">
-                    <i class="fas fa-folder-open empty-icon"></i>
-                    <h3>Nenhum efeito ou overlay encontrado</h3>
-                    <p>Adicione pastas de áudios ou mude os filtros de pesquisa.</p>
-                </div>
-            `;
-            return;
-        }
-
-        if (this.viewMode === 'list') {
-            container.className = 'asset-list-container';
-            this.renderAssetList(visibleSlice, container);
-        } else {
-            container.className = 'grid-assets';
-            this.renderAssetGrid(visibleSlice, container);
-        }
+        this.viewMode = 'folder';
+        this.renderFolderView(container);
     }
 
     /**
