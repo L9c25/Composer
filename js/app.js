@@ -899,7 +899,7 @@ class ComposerApp {
 
     /**
      * Render Compact List View (Estilo Premiere Composer)
-     * Inclui exibição de subpastas no topo se houver subpastas na visualização ativa
+     * Inclui exibição de pastas e subpastas no topo da lista
      */
     renderAssetList(assets, container) {
         var pathLib = typeof require !== 'undefined' ? require('path') : null;
@@ -917,6 +917,10 @@ class ComposerApp {
                     }
                 }
             });
+        } else {
+            // Render root user folders if no specific sidebar folder is selected
+            var rootFolders = window.cacheMgr.getFolders();
+            rootFolders.forEach(fP => subfolderPaths.add(fP));
         }
 
         var subfolders = Array.from(subfolderPaths).sort();
@@ -928,8 +932,8 @@ class ComposerApp {
             var count = this.allAssets.filter(a => a.path.startsWith(subP)).length;
 
             html += `
-                <div class="asset-list-row folder-list-row" data-subfolder-path="${encodeURIComponent(subP)}" style="cursor:pointer; background:rgba(245, 158, 11, 0.05);">
-                    <span style="width:16px;"></span>
+                <div class="asset-list-row folder-list-row" data-subfolder-path="${encodeURIComponent(subP)}" style="cursor:pointer; background:rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b;">
+                    <span style="width:14px;"></span>
                     <div class="list-col-type">
                         <i class="fas fa-folder" style="color:#f59e0b;"></i>
                     </div>
@@ -937,7 +941,7 @@ class ComposerApp {
                         <span class="list-asset-name" style="font-weight:600; color:#fff;">${fName}</span>
                     </div>
                     <div class="list-col-meta">
-                        <span class="composer-count-badge">${count} itens</span>
+                        <span class="composer-count-badge" style="color:#f59e0b; background:rgba(245, 158, 11, 0.12);">${count} itens</span>
                     </div>
                 </div>
             `;
@@ -1217,10 +1221,19 @@ class ComposerApp {
         var playerTitle = document.getElementById('player-title');
         var mainCanvas = document.getElementById('player-waveform-canvas');
 
+        var isCurrentlyPlaying = false;
+        if (window.audioEngine.currentSound && window.audioEngine.currentSoundPath && asset && asset.path) {
+            var path1 = window.audioEngine.currentSoundPath.replace(/\\/g, '/').toLowerCase();
+            var path2 = asset.path.replace(/\\/g, '/').toLowerCase();
+            if (path1 === path2) {
+                isCurrentlyPlaying = true;
+            }
+        }
+
         this.selectAndDrawPlayerAsset(asset);
 
         // If clicking on the asset that is CURRENTLY playing, pause/stop it!
-        if (window.audioEngine.currentSoundPath === asset.path) {
+        if (isCurrentlyPlaying) {
             window.audioEngine.stopAudioPreview();
             if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
