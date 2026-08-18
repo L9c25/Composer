@@ -1218,6 +1218,10 @@ class ComposerApp {
 
     async insertToTimeline(asset) {
         var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
+        if (selectMaxPeakPlayer) {
+            targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
+        }
 
         // Ensure procData and nativePeakDb are computed prior to script call
         if (!asset.procData && asset.type === 'sfx') {
@@ -1236,19 +1240,14 @@ class ComposerApp {
 
         var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
 
-        // If Pitch or Reverse is enabled, generate processed audio file for insertion
+        // Generate audio file with Pitch, Reverse & Max Peak PCM Normalization applied
         var insertPath = asset.path;
-        if (asset.type === 'sfx' && (this.pitchSemitones !== 0 || this.isReverse)) {
+        if (asset.type === 'sfx') {
             try {
-                insertPath = await window.audioEngine.generateProcessedWAV(asset.path, this.pitchSemitones, this.isReverse);
+                insertPath = await window.audioEngine.generateProcessedWAV(asset.path, this.pitchSemitones, this.isReverse, targetMaxPeak);
             } catch (eProc) {
-                console.error("Error generating pitch/reverse WAV:", eProc);
+                console.error("Error generating processed WAV:", eProc);
             }
-        }
-
-        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
-        if (selectMaxPeakPlayer) {
-            targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
         }
 
         var scriptCall = `ComposerHost.importAndInsertAsset(${JSON.stringify(insertPath)}, ${JSON.stringify(asset.type)}, ${targetMaxPeak}, ${nativePeak}, 0, false)`;

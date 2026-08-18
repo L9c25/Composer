@@ -227,9 +227,12 @@ class AudioEngine {
     /**
      * Generate temporary WAV file with Pitch Shift and/or Reverse applied for Premiere timeline insertion
      */
-    async generateProcessedWAV(filePath, pitchSemitones = 0, isReverse = false) {
+    async generateProcessedWAV(filePath, pitchSemitones = 0, isReverse = false, targetMaxPeakDb = null) {
         if (typeof require === 'undefined') return filePath;
-        if (pitchSemitones === 0 && !isReverse) return filePath;
+        var hasPitchOrRev = (pitchSemitones !== 0 || isReverse);
+        var hasPeakNorm = (targetMaxPeakDb !== null && targetMaxPeakDb !== undefined && !isNaN(targetMaxPeakDb));
+
+        if (!hasPitchOrRev && !hasPeakNorm) return filePath;
 
         var fs = require('fs');
         var path = require('path');
@@ -281,12 +284,34 @@ class AudioEngine {
             outputChannels = resampledChannels;
         }
 
+        // Max Peak Audio Normalization directly on Float32 PCM samples
+        if (hasPeakNorm) {
+            var maxAmp = 0;
+            var numSamples = outputChannels[0].length;
+            for (var c = 0; c < numChannels; c++) {
+                for (var i = 0; i < numSamples; i++) {
+                    var absVal = Math.abs(outputChannels[c][i]);
+                    if (absVal > maxAmp) maxAmp = absVal;
+                }
+            }
+
+            if (maxAmp > 0.00001) {
+                var targetAmp = Math.pow(10, parseFloat(targetMaxPeakDb) / 20);
+                var gainRatio = targetAmp / maxAmp;
+                for (var c = 0; c < numChannels; c++) {
+                    for (var i = 0; i < numSamples; i++) {
+                        outputChannels[c][i] = Math.max(-1, Math.min(1, outputChannels[c][i] * gainRatio));
+                    }
+                }
+            }
+        }
+
         var wavBuf = this.encodeWAV(outputChannels, origSampleRate);
 
         // Save to temporary processed file
         var tempDir = os.tmpdir();
         var baseName = path.basename(filePath, path.extname(filePath));
-        var tempWavPath = path.join(tempDir, `composer_proc_${baseName}_p${pitchSemitones}_r${isReverse ? 1 : 0}.wav`);
+        var tempWavPath = path.join(tempDir, `composer_proc_${baseName}_p${pitchSemitones}_r${isReverse ? 1 : 0}_pk${targetMaxPeakDb}.wav`);
 
         fs.writeFileSync(tempWavPath, wavBuf);
         return tempWavPath;
