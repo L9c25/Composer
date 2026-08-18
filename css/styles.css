@@ -769,13 +769,95 @@ input:checked + .toggle-slider:before {
 
 /* Footer Audio Player Bar */
 .player-bar {
-    height: 64px;
     background-color: var(--bg-sidebar);
     border-top: 1px solid var(--border-color);
     display: flex;
+    flex-direction: column;
+    padding: 10px 16px;
+    gap: 8px;
+}
+
+.player-top-row {
+    display: flex;
     align-items: center;
-    padding: 0 20px;
-    gap: 16px;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.player-extra-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.pitch-control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ctrl-label {
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.pitch-slider {
+    width: 90px;
+    accent-color: var(--accent-emerald);
+    cursor: pointer;
+}
+
+.pitch-value-badge {
+    font-weight: 700;
+    color: var(--accent-green-bright);
+    min-width: 16px;
+    text-align: center;
+}
+
+.btn-reset-pitch {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-dim);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-reset-pitch:hover {
+    color: #fff;
+    border-color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.reverse-control-group {
+    display: flex;
+    align-items: center;
+}
+
+.reverse-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: var(--transition);
+}
+
+.reverse-checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent-emerald);
+    cursor: pointer;
+}
+
+.reverse-checkbox-label:hover {
+    color: #fff;
 }
 
 .player-info {

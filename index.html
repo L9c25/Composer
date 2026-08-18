@@ -164,18 +164,37 @@
 
             <!-- Player Bar Footer -->
             <footer class="player-bar">
-                <div class="player-info">
-                    <div class="player-title-box">
-                        <span class="player-title" id="player-title">Nenhum áudio selecionado</span>
-                        <span class="player-subtitle">Clique no play para ouvir o preview</span>
+                <div class="player-top-row">
+                    <div class="player-info">
+                        <div class="player-title-box">
+                            <span class="player-title" id="player-title">Nenhum áudio selecionado</span>
+                            <span class="player-subtitle">Clique no áudio para ouvir e aplicar efeitos</span>
+                        </div>
+                    </div>
+
+                    <div class="player-controls">
+                        <div class="player-buttons">
+                            <button class="btn-play-main" id="btn-play-main">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="player-controls">
-                    <div class="player-buttons">
-                        <button class="btn-play-main" id="btn-play-main">
-                            <i class="fas fa-play"></i>
-                        </button>
+                <!-- Advanced Audio Controls: Pitch & Reverse (Estilo Premiere Composer) -->
+                <div class="player-extra-controls">
+                    <div class="pitch-control-group">
+                        <span class="ctrl-label">Pitch:</span>
+                        <input type="range" id="slider-pitch" class="pitch-slider" min="-12" max="12" step="1" value="0">
+                        <span class="pitch-value-badge" id="val-pitch">0</span>
+                        <button class="btn-reset-pitch" id="btn-reset-pitch" title="Resetar Afinação">Reset</button>
+                    </div>
+
+                    <div class="reverse-control-group">
+                        <label class="reverse-checkbox-label">
+                            <input type="checkbox" id="chk-reverse">
+                            <span>Reverse</span>
+                        </label>
                     </div>
                 </div>
             </footer>

@@ -20,6 +20,9 @@ class ComposerApp {
         this.pageSize = 60;
         this.renderedCount = 60;
         this.activePlayingAsset = null;
+        this.selectedAsset = null;
+        this.pitchSemitones = 0;
+        this.isReverse = false;
 
         this.initUI();
         this.bindEvents();
@@ -49,6 +52,53 @@ class ComposerApp {
         var silenceThresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
         var inputThresh = document.getElementById('input-silence-thresh');
         if (inputThresh) inputThresh.value = silenceThresh;
+
+        // Bind Footer Pitch & Reverse Controls
+        var sliderPitch = document.getElementById('slider-pitch');
+        var valPitch = document.getElementById('val-pitch');
+        var btnResetPitch = document.getElementById('btn-reset-pitch');
+        var chkReverse = document.getElementById('chk-reverse');
+        var btnPlayMain = document.getElementById('btn-play-main');
+
+        if (sliderPitch && valPitch) {
+            sliderPitch.addEventListener('input', (e) => {
+                this.pitchSemitones = parseInt(e.target.value, 10) || 0;
+                valPitch.textContent = this.pitchSemitones > 0 ? `+${this.pitchSemitones}` : `${this.pitchSemitones}`;
+                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
+                    this.playAudioPreview(this.selectedAsset, null, null);
+                }
+            });
+        }
+
+        if (btnResetPitch) {
+            btnResetPitch.addEventListener('click', () => {
+                this.pitchSemitones = 0;
+                if (sliderPitch) sliderPitch.value = 0;
+                if (valPitch) valPitch.textContent = "0";
+                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
+                    this.playAudioPreview(this.selectedAsset, null, null);
+                }
+            });
+        }
+
+        if (chkReverse) {
+            chkReverse.addEventListener('change', (e) => {
+                this.isReverse = e.target.checked;
+                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
+                    this.playAudioPreview(this.selectedAsset, null, null);
+                }
+            });
+        }
+
+        if (btnPlayMain) {
+            btnPlayMain.addEventListener('click', () => {
+                if (this.selectedAsset) {
+                    this.playAudioPreview(this.selectedAsset, null, null);
+                } else if (this.allAssets.length > 0) {
+                    this.playAudioPreview(this.allAssets[0], null, null);
+                }
+            });
+        }
 
         this.renderFoldersList();
     }
@@ -1043,7 +1093,7 @@ class ComposerApp {
         if (btnMain) btnMain.innerHTML = `<i class="fas fa-stop"></i>`;
         if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-stop"></i>`;
 
-        window.audioEngine.playAudioPreview(asset.path, (pct, elapsed, duration) => {
+        window.audioEngine.playAudioPreview(asset.path, this.pitchSemitones, this.isReverse, (pct, elapsed, duration) => {
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
             }

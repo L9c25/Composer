@@ -331,26 +331,52 @@ class AudioEngine {
     }
 
     /**
-     * Preview Audio Playback in Extension Panel
+     * Preview Audio Playback in Extension Panel with Pitch & Reverse support
      */
-    async playAudioPreview(filePath, onProgress, onEnded) {
+    async playAudioPreview(filePath, pitchSemitones = 0, isReverse = false, onProgress, onEnded) {
         this.stopAudioPreview();
 
         try {
-            var audioBuffer = await this.decodeAudioFile(filePath);
+            var originalBuffer = await this.decodeAudioFile(filePath);
+            
+            // Create playable AudioBuffer
+            var audioBuffer = originalBuffer;
+            if (isReverse) {
+                // Clone & reverse channels
+                var numChannels = originalBuffer.numberOfChannels;
+                var totalLen = originalBuffer.length;
+                var reversedBuffer = this.audioCtx.createBuffer(numChannels, totalLen, originalBuffer.sampleRate);
+                for (var c = 0; c < numChannels; c++) {
+                    var origData = originalBuffer.getChannelData(c);
+                    var revData = reversedBuffer.getChannelData(c);
+                    for (var i = 0; i < totalLen; i++) {
+                        revData[i] = origData[totalLen - 1 - i];
+                    }
+                }
+                audioBuffer = reversedBuffer;
+            }
+
             var source = this.audioCtx.createBufferSource();
             source.buffer = audioBuffer;
+
+            // Apply Pitch Shift (semitones: -12 to +12)
+            if (pitchSemitones !== 0) {
+                var rate = Math.pow(2, pitchSemitones / 12);
+                source.playbackRate.value = rate;
+            }
 
             var gainNode = this.audioCtx.createGain();
             source.connect(gainNode);
             gainNode.connect(this.audioCtx.destination);
+
+            var playbackDuration = audioBuffer.duration / (source.playbackRate.value || 1);
 
             this.currentSound = {
                 source: source,
                 gainNode: gainNode,
                 buffer: audioBuffer,
                 startTime: this.audioCtx.currentTime,
-                duration: audioBuffer.duration
+                duration: playbackDuration
             };
             this.currentSoundPath = filePath;
 
