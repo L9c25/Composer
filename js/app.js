@@ -262,6 +262,20 @@ class ComposerApp {
             });
         }
 
+        // Global + Inserir Button in Player
+        var btnInsertMain = document.getElementById('btn-insert-main');
+        if (btnInsertMain && !btnInsertMain._boundInsert) {
+            btnInsertMain._boundInsert = true;
+            btnInsertMain.addEventListener('click', () => {
+                var target = this.selectedAsset || (this.filteredAssets.length > 0 ? this.filteredAssets[0] : (this.allAssets.length > 0 ? this.allAssets[0] : null));
+                if (target) {
+                    this.insertToTimeline(target);
+                } else {
+                    alert("Nenhum áudio selecionado para inserir.");
+                }
+            });
+        }
+
         // Infinite Scroll Handler for Large Asset Libraries (+10,000 files)
         var contentBody = document.querySelector('.content-body');
         if (contentBody) {
@@ -1100,19 +1114,6 @@ class ComposerApp {
                 window.overlayEngine.setupHoverScrub(itemEl, asset.path);
             }
         });
-        var btnInsertMain = document.getElementById('btn-insert-main');
-        if (btnInsertMain && !btnInsertMain._boundInsert) {
-            btnInsertMain._boundInsert = true;
-            btnInsertMain.addEventListener('click', () => {
-                if (this.selectedAsset) {
-                    this.insertToTimeline(this.selectedAsset);
-                } else if (this.allAssets.length > 0) {
-                    this.insertToTimeline(this.allAssets[0]);
-                } else {
-                    alert("Nenhum áudio selecionado para inserir.");
-                }
-            });
-        }
 
         var mainCanvas = document.getElementById('player-waveform-canvas');
         if (mainCanvas && !mainCanvas._boundSeek) {
