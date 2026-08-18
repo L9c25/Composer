@@ -651,7 +651,7 @@ class ComposerApp {
     renderFolderView(container) {
         container.className = 'composer-tree-view';
         var pathLib = typeof require !== 'undefined' ? require('path') : null;
-        var userFolders = window.cacheMgr.getFolders();
+        var userFolders = this.selectedSidebarFolder ? [this.selectedSidebarFolder] : window.cacheMgr.getFolders();
 
         if (userFolders.length === 0) {
             container.innerHTML = `
@@ -1183,8 +1183,8 @@ class ComposerApp {
         });
 
         if (playerTitle) playerTitle.textContent = asset.name;
-        if (btnMain) btnMain.innerHTML = `<i class="fas fa-stop"></i>`;
-        if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-stop"></i>`;
+        if (btnMain) btnMain.innerHTML = `<i class="fas fa-pause"></i>`;
+        if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-pause"></i>`;
 
         window.audioEngine.playAudioPreview(asset.path, this.pitchSemitones, this.isReverse, (pct, elapsed, duration) => {
             if (canvas && asset.procData) {
