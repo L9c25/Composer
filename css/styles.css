@@ -722,3 +722,308 @@ input:checked + .toggle-slider:before {
     font-size: 40px;
     color: var(--border-color);
 }
+
+/* ==========================================================================
+   VIEW MODE SWITCHER & HEADER EXTRA CONTROLS
+   ========================================================================== */
+.view-mode-group {
+    display: flex;
+    align-items: center;
+    background: var(--bg-input);
+    padding: 3px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-left: 8px;
+    gap: 2px;
+}
+
+.btn-view-mode {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 5px 9px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    transition: var(--transition);
+}
+
+.btn-view-mode:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-view-mode.active {
+    background: var(--accent-emerald);
+    color: #000;
+    font-weight: 700;
+    box-shadow: 0 0 10px var(--accent-emerald-glow);
+}
+
+/* ==========================================================================
+   INDEXING PROGRESS BAR BANNER
+   ========================================================================== */
+.indexing-banner {
+    background: linear-gradient(90deg, #101921, #16222e);
+    border-bottom: 1px solid var(--border-accent);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.indexing-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 220px;
+}
+
+.indexing-icon {
+    color: var(--accent-emerald);
+    font-size: 18px;
+}
+
+.indexing-text-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.indexing-status-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+}
+
+.indexing-status-detail {
+    font-size: 10px;
+    color: var(--text-muted);
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.indexing-bar-wrapper {
+    flex: 1;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.indexing-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-emerald), var(--accent-green-bright));
+    border-radius: var(--radius-full);
+    transition: width 0.15s ease-out;
+    box-shadow: 0 0 12px var(--accent-emerald);
+}
+
+.indexing-count-badge {
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green-bright);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   SECTION HEADER & BREADCRUMB NAVIGATION
+   ========================================================================== */
+.section-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.section-header-right {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
+
+.breadcrumb-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+    color: var(--accent-emerald);
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.breadcrumb-item:hover {
+    color: #fff;
+    text-decoration: underline;
+}
+
+.breadcrumb-item.active {
+    color: var(--text-main);
+    cursor: default;
+    text-decoration: none;
+}
+
+.breadcrumb-sep {
+    color: var(--text-dim);
+    font-size: 9px;
+}
+
+/* ==========================================================================
+   LIST VIEW LAYOUT (ESTILO PREMIERE COMPOSER)
+   ========================================================================== */
+.asset-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.asset-list-row {
+    display: flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    gap: 12px;
+    transition: var(--transition);
+}
+
+.asset-list-row:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-emerald);
+    transform: translateX(2px);
+}
+
+.list-col-type {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+}
+
+.list-col-play {
+    display: flex;
+    align-items: center;
+}
+
+.list-col-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.list-asset-name {
+    font-weight: 600;
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-asset-path {
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-col-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.list-dur-badge, .list-peak-badge {
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.list-col-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ==========================================================================
+   FOLDER TREE VIEW GRID (ESTILO PREMIERE COMPOSER)
+   ========================================================================== */
+.folder-tree-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.folder-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.folder-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-emerald);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+    transform: translateY(-2px);
+}
+
+.folder-card-icon {
+    font-size: 26px;
+    color: #f59e0b;
+}
+
+.folder-card-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.folder-card-name {
+    font-weight: 700;
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-card-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+

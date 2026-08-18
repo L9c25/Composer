@@ -98,17 +98,52 @@
                     <button class="btn-pill active" data-filter="all">TUDO</button>
                     <button class="btn-pill" data-filter="sfx">ÁUDIOS</button>
                     <button class="btn-pill" data-filter="overlay">OVERLAYS</button>
+                    
+                    <div class="view-mode-group" id="view-mode-group">
+                        <button class="btn-view-mode active" data-view="grid" title="Visualização em Grid">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button class="btn-view-mode" data-view="list" title="Visualização em Lista">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <button class="btn-view-mode" data-view="folder" title="Navegar por Pastas">
+                            <i class="fas fa-folder-tree"></i>
+                        </button>
+                    </div>
                 </div>
             </header>
 
-            <!-- Asset Grid -->
+            <!-- Indexing Progress Bar Banner -->
+            <div class="indexing-banner" id="indexing-banner" style="display: none;">
+                <div class="indexing-info">
+                    <i class="fas fa-compact-disc fa-spin indexing-icon"></i>
+                    <div class="indexing-text-group">
+                        <span class="indexing-status-title" id="indexing-status-title">Indexando pastas...</span>
+                        <span class="indexing-status-detail" id="indexing-status-detail">Varrendo arquivos em lote...</span>
+                    </div>
+                </div>
+                <div class="indexing-bar-wrapper">
+                    <div class="indexing-bar-fill" id="indexing-bar-fill" style="width: 0%;"></div>
+                </div>
+                <span class="indexing-count-badge" id="indexing-count-badge">0 arquivos</span>
+            </div>
+
+            <!-- Content Area -->
             <section class="content-body">
                 <div class="section-header">
-                    <h2 class="section-title">Navegador de Assets</h2>
+                    <div class="section-header-left">
+                        <h2 class="section-title" id="section-title">Navegador de Assets</h2>
+                        <div class="breadcrumb-container" id="breadcrumb-container" style="display: none;">
+                            <!-- Breadcrumb links populated dynamically -->
+                        </div>
+                    </div>
+                    <div class="section-header-right" id="asset-count-display">
+                        0 itens
+                    </div>
                 </div>
 
                 <div class="grid-assets" id="grid-assets">
-                    <!-- Populated dynamically -->
+                    <!-- Populated dynamically (Grid, List, or Folder view) -->
                 </div>
             </section>
 

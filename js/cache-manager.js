@@ -19,7 +19,8 @@ class CacheManager {
             folders: [],
             favorites: [],
             audioCache: {},                  // Waveform arrays, native peaks, silence bounds
-            overlayCache: {}                 // Video overlay thumbnails & metadata
+            overlayCache: {},                // Video overlay thumbnails & metadata
+            scannedIndex: []                 // Cached list of all scanned assets
         };
 
         this.initNodeModules();
@@ -180,6 +181,16 @@ class CacheManager {
 
     setOverlayCache(filePath, mtime, cacheData) {
         this.data.overlayCache[filePath] = Object.assign({ mtime: mtime }, cacheData);
+        this.saveCache();
+    }
+
+    // Scanned Index Cache
+    getScannedIndex() {
+        return this.data.scannedIndex || [];
+    }
+
+    setScannedIndex(assets) {
+        this.data.scannedIndex = assets || [];
         this.saveCache();
     }
 }

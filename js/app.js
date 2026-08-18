@@ -1,19 +1,22 @@
 /**
  * Premiere Composer FX Studio - Main Application Controller
- * Handles Folder Scanning, Ultra-Fast Search Engine, UI State,
- * CSInterface Bridge to Premiere Pro 2025, Audio Max Peak persistence,
- * and Cut Silence file overwrite trigger.
+ * High-Performance Async Folder Scanning, Progress Bar, Cache Engine,
+ * View Modes (Grid, List, Folder Tree), and Adobe Premiere Pro 2025 Bridge.
  */
 
 class ComposerApp {
     constructor() {
         this.csInterface = new CSInterface();
-        this.allAssets = [];        // Scanned assets list
-        this.filteredAssets = [];   // Search & filter result
+        this.allAssets = [];        // Complete scanned assets list
+        this.filteredAssets = [];   // Search & filter results
         this.currentFilter = 'all'; // all, sfx, overlay, favorites
+        this.viewMode = 'grid';     // grid, list, folder
+        this.currentFolderNav = null; // null = Root, or string path
         this.searchQuery = '';
         this.isScanning = false;
         
+        this.pageSize = 60;
+        this.renderedCount = 60;
         this.activePlayingAsset = null;
 
         this.initUI();
@@ -55,7 +58,7 @@ class ComposerApp {
             });
         }
 
-        // Navigation Tabs (All, SFX, Overlays, Favorites)
+        // Navigation Category Tabs (All, SFX, Overlays, Favorites)
         var tabBtns = document.querySelectorAll('.nav-item[data-filter]');
         tabBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -63,6 +66,18 @@ class ComposerApp {
                 var target = e.currentTarget;
                 target.classList.add('active');
                 this.currentFilter = target.getAttribute('data-filter');
+                this.applyFiltersAndRender();
+            });
+        });
+
+        // View Mode Switcher (Grid, List, Folder)
+        var viewBtns = document.querySelectorAll('.btn-view-mode[data-view]');
+        viewBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                viewBtns.forEach(b => b.classList.remove('active'));
+                var target = e.currentTarget;
+                target.classList.add('active');
+                this.viewMode = target.getAttribute('data-view');
                 this.applyFiltersAndRender();
             });
         });
@@ -76,7 +91,6 @@ class ComposerApp {
         // Max Peak Slider & Input Sync
         var slider = document.getElementById('slider-max-peak');
         var input = document.getElementById('input-max-peak');
-
         if (slider && input) {
             slider.addEventListener('input', (e) => {
                 var val = parseFloat(e.target.value).toFixed(1);
@@ -122,6 +136,19 @@ class ComposerApp {
                 }
             });
         }
+
+        // Infinite Scroll Handler for Large Asset Libraries (+10,000 files)
+        var contentBody = document.querySelector('.content-body');
+        if (contentBody) {
+            contentBody.addEventListener('scroll', () => {
+                if (contentBody.scrollTop + contentBody.clientHeight >= contentBody.scrollHeight - 300) {
+                    if (this.renderedCount < this.filteredAssets.length) {
+                        this.renderedCount += this.pageSize;
+                        this.renderCurrentView(true); // append mode
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -130,7 +157,6 @@ class ComposerApp {
     promptAddFolder() {
         if (typeof require !== 'undefined') {
             try {
-                // Electron / CEP dialog via input or node dialog
                 var input = document.createElement('input');
                 input.type = 'file';
                 input.webkitdirectory = true;
@@ -148,7 +174,6 @@ class ComposerApp {
             } catch (err) {}
         }
         
-        // Manual prompt fallback
         var folder = prompt("Digite o caminho completo da pasta de efeitos (ex: C:\\Audios\\SFX):");
         if (folder && folder.trim()) {
             this.addFolderAndScan(folder.trim());
@@ -188,7 +213,6 @@ class ComposerApp {
             `;
         }).join('');
 
-        // Bind folder remove events
         container.querySelectorAll('.folder-remove').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -198,23 +222,33 @@ class ComposerApp {
         });
     }
 
+    /**
+     * Initial Load with Instant Index Cache Hydration
+     */
     loadInitialFolders() {
+        var cachedAssets = window.cacheMgr.getScannedIndex();
+        if (cachedAssets && cachedAssets.length > 0) {
+            this.allAssets = cachedAssets;
+            var badgeAll = document.getElementById('badge-count-all');
+            if (badgeAll) badgeAll.textContent = this.allAssets.length;
+            this.applyFiltersAndRender();
+        }
+
         var folders = window.cacheMgr.getFolders();
         if (folders.length > 0) {
             this.rescanAllFolders();
-        } else {
-            this.renderAssetGrid([]);
+        } else if (!cachedAssets || cachedAssets.length === 0) {
+            this.applyFiltersAndRender();
         }
     }
 
     /**
-     * Recursive Folder Scanning Engine (Node.js fs)
+     * Non-Blocking Async Folder Scanner with Progress Bar for +10GB / Thousands of Audios
      */
     async rescanAllFolders() {
-        if (typeof require === 'undefined') {
-            console.warn("Folder scanning requires CEP Node.js environment.");
-            return;
-        }
+        if (typeof require === 'undefined') return;
+        if (this.isScanning) return;
+        this.isScanning = true;
 
         var fs = require('fs');
         var path = require('path');
@@ -224,61 +258,92 @@ class ComposerApp {
         var videoExts = ['.mp4', '.mov', '.webm', '.avi'];
 
         var foundAssets = [];
+        var queue = [...folders];
 
-        var scanRecursive = (dirPath) => {
+        // UI Progress Banner Elements
+        var banner = document.getElementById('indexing-banner');
+        var barFill = document.getElementById('indexing-bar-fill');
+        var detailText = document.getElementById('indexing-status-detail');
+        var countBadge = document.getElementById('indexing-count-badge');
+
+        if (banner) banner.style.display = 'flex';
+        if (barFill) barFill.style.width = '5%';
+
+        var processedDirs = 0;
+        var yieldCounter = 0;
+
+        while (queue.length > 0) {
+            var currentDir = queue.shift();
+            processedDirs++;
+
             try {
-                var entries = fs.readdirSync(dirPath, { withFileTypes: true });
-                for (var entry of entries) {
-                    var fullPath = path.join(dirPath, entry.name);
-                    if (entry.isDirectory()) {
-                        scanRecursive(fullPath);
-                    } else if (entry.isFile()) {
-                        var ext = path.extname(entry.name).toLowerCase();
-                        var stats = fs.statSync(fullPath);
-                        
-                        if (audioExts.includes(ext)) {
-                            foundAssets.push({
-                                type: 'sfx',
-                                path: fullPath,
-                                name: entry.name,
-                                ext: ext,
-                                mtime: stats.mtimeMs,
-                                size: stats.size
-                            });
-                        } else if (videoExts.includes(ext)) {
-                            foundAssets.push({
-                                type: 'overlay',
-                                path: fullPath,
-                                name: entry.name,
-                                ext: ext,
-                                mtime: stats.mtimeMs,
-                                size: stats.size
-                            });
+                if (fs.existsSync(currentDir)) {
+                    var entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+
+                    for (var entry of entries) {
+                        var fullPath = path.join(currentDir, entry.name);
+                        if (entry.isDirectory()) {
+                            queue.push(fullPath);
+                        } else if (entry.isFile()) {
+                            var ext = path.extname(entry.name).toLowerCase();
+                            var isAudio = audioExts.includes(ext);
+                            var isVideo = videoExts.includes(ext);
+
+                            if (isAudio || isVideo) {
+                                var stats = fs.statSync(fullPath);
+                                var relFolder = path.dirname(fullPath);
+
+                                foundAssets.push({
+                                    type: isAudio ? 'sfx' : 'overlay',
+                                    path: fullPath,
+                                    name: entry.name,
+                                    ext: ext,
+                                    dir: relFolder,
+                                    mtime: stats.mtimeMs,
+                                    size: stats.size
+                                });
+                            }
                         }
                     }
                 }
-            } catch (err) {
-                console.error("Scan error on path:", dirPath, err);
+            } catch (errDir) {
+                console.warn("[Scanner] Error reading directory:", currentDir, errDir);
             }
-        };
 
-        for (var folder of folders) {
-            if (fs.existsSync(folder)) {
-                scanRecursive(folder);
+            // Yield control back to UI thread every 15 directories to keep interface silky smooth
+            yieldCounter++;
+            if (yieldCounter % 15 === 0) {
+                if (countBadge) countBadge.textContent = `${foundAssets.length.toLocaleString()} arquivos`;
+                if (detailText) detailText.textContent = `Lendo: ${path.basename(currentDir)}`;
+                if (barFill) {
+                    var progressEst = Math.min(95, Math.floor((processedDirs / (processedDirs + queue.length)) * 100));
+                    barFill.style.width = `${progressEst}%`;
+                }
+                await new Promise(r => setTimeout(r, 0));
             }
         }
 
         this.allAssets = foundAssets;
-        
-        // Update nav badge count
+        window.cacheMgr.setScannedIndex(foundAssets);
+
         var badgeAll = document.getElementById('badge-count-all');
         if (badgeAll) badgeAll.textContent = this.allAssets.length;
 
+        // Completion UI state
+        if (barFill) barFill.style.width = '100%';
+        if (countBadge) countBadge.textContent = `${foundAssets.length.toLocaleString()} arquivos escaneados`;
+        if (detailText) detailText.textContent = `Indexação concluída!`;
+
+        setTimeout(() => {
+            if (banner) banner.style.display = 'none';
+        }, 1500);
+
+        this.isScanning = false;
         this.applyFiltersAndRender();
     }
 
     /**
-     * Ultra-Fast Filter Engine
+     * Filter & Query Engine
      */
     applyFiltersAndRender() {
         var query = this.searchQuery;
@@ -297,31 +362,275 @@ class ComposerApp {
                 if (!matchName && !matchPath) return false;
             }
 
+            // Subfolder Navigation Filter (for Folder View or Folder Nav)
+            if (this.currentFolderNav && !query) {
+                var pathLib = typeof require !== 'undefined' ? require('path') : null;
+                if (pathLib) {
+                    if (!asset.path.startsWith(this.currentFolderNav)) return false;
+                }
+            }
+
             return true;
         });
 
-        this.renderAssetGrid(this.filteredAssets);
+        this.renderedCount = this.pageSize;
+        this.renderCurrentView();
     }
 
     /**
-     * Render Asset Grid Cards
+     * Main View Dispatcher (Grid, List, Folder Tree)
      */
-    renderAssetGrid(assets) {
-        var grid = document.getElementById('grid-assets');
-        if (!grid) return;
+    renderCurrentView(isAppend = false) {
+        var container = document.getElementById('grid-assets');
+        var breadcrumbBox = document.getElementById('breadcrumb-container');
+        var sectionTitle = document.getElementById('section-title');
+        var countDisplay = document.getElementById('asset-count-display');
 
-        if (assets.length === 0) {
-            grid.innerHTML = `
+        if (!container) return;
+
+        if (countDisplay) {
+            countDisplay.textContent = `${this.filteredAssets.length.toLocaleString()} itens`;
+        }
+
+        // Handle Folder Navigation Header & Breadcrumbs
+        if (this.viewMode === 'folder') {
+            if (breadcrumbBox) {
+                breadcrumbBox.style.display = 'flex';
+                this.renderBreadcrumbs();
+            }
+            if (sectionTitle) sectionTitle.textContent = "Navegador por Pastas";
+            
+            this.renderFolderView(container);
+            return;
+        } else {
+            if (breadcrumbBox) breadcrumbBox.style.display = 'none';
+            if (sectionTitle) {
+                sectionTitle.textContent = this.viewMode === 'list' ? "Lista de Assets" : "Navegador de Assets";
+            }
+        }
+
+        var visibleSlice = this.filteredAssets.slice(0, this.renderedCount);
+
+        if (visibleSlice.length === 0) {
+            container.className = 'grid-assets';
+            container.innerHTML = `
                 <div class="empty-state" style="grid-column: 1 / -1;">
                     <i class="fas fa-folder-open empty-icon"></i>
                     <h3>Nenhum efeito ou overlay encontrado</h3>
-                    <p>Adicione pastas com seus arquivos de áudio (.wav, .mp3) ou vídeos (.mp4, .mov).</p>
+                    <p>Adicione pastas de áudios ou mude os filtros de pesquisa.</p>
                 </div>
             `;
             return;
         }
 
-        grid.innerHTML = assets.map((asset, idx) => {
+        if (this.viewMode === 'list') {
+            container.className = 'asset-list-container';
+            this.renderAssetList(visibleSlice, container);
+        } else {
+            container.className = 'grid-assets';
+            this.renderAssetGrid(visibleSlice, container);
+        }
+    }
+
+    /**
+     * Render Folder Tree & Subdirectories View (Estilo Premiere Composer)
+     */
+    renderFolderView(container) {
+        container.className = 'folder-tree-grid';
+        var pathLib = typeof require !== 'undefined' ? require('path') : null;
+        var userFolders = window.cacheMgr.getFolders();
+
+        if (userFolders.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <i class="fas fa-folder-plus empty-icon"></i>
+                    <h3>Nenhuma pasta local vinculada</h3>
+                    <p>Clique em "+ Adicionar Pasta" na barra lateral para começar.</p>
+                </div>
+            `;
+            return;
+        }
+
+        var subfoldersMap = new Map();
+        var filesInFolder = [];
+
+        var targetDir = this.currentFolderNav;
+
+        if (!targetDir) {
+            // Root View: Show Root User Folders
+            userFolders.forEach(fPath => {
+                var name = pathLib ? pathLib.basename(fPath) : fPath.split(/[\/\\]/).pop();
+                var count = this.allAssets.filter(a => a.path.startsWith(fPath)).length;
+                subfoldersMap.set(fPath, { name: name, fullPath: fPath, count: count });
+            });
+        } else {
+            // Subfolder View: Find direct children folders & files inside targetDir
+            this.allAssets.forEach(asset => {
+                if (asset.path.startsWith(targetDir) && asset.path !== targetDir) {
+                    var rel = asset.path.substring(targetDir.length).replace(/^[\/\\]/, '');
+                    var parts = rel.split(/[\/\\]/);
+
+                    if (parts.length > 1) {
+                        // It's in a child subfolder
+                        var subName = parts[0];
+                        var subFullPath = pathLib ? pathLib.join(targetDir, subName) : targetDir + '/' + subName;
+                        if (!subfoldersMap.has(subFullPath)) {
+                            subfoldersMap.set(subFullPath, { name: subName, fullPath: subFullPath, count: 0 });
+                        }
+                        subfoldersMap.get(subFullPath).count++;
+                    } else {
+                        // Direct file in this folder
+                        filesInFolder.push(asset);
+                    }
+                }
+            });
+        }
+
+        var html = '';
+
+        // Render Folder Cards
+        subfoldersMap.forEach((info) => {
+            html += `
+                <div class="folder-card" data-folder-path="${encodeURIComponent(info.fullPath)}">
+                    <i class="fas fa-folder folder-card-icon"></i>
+                    <div class="folder-card-info">
+                        <span class="folder-card-name" title="${info.name}">${info.name}</span>
+                        <span class="folder-card-count">${info.count.toLocaleString()} itens</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        // If direct files exist, render them below as list
+        if (filesInFolder.length > 0) {
+            html += `<div style="grid-column: 1 / -1; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                <h4 style="color:var(--text-muted); font-size:11px; margin-bottom:10px; text-transform:uppercase;">Arquivos nesta pasta:</h4>
+                <div class="asset-list-container" id="folder-files-list"></div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+
+        // Bind folder navigation clicks
+        container.querySelectorAll('.folder-card').forEach(card => {
+            card.addEventListener('click', () => {
+                var fPath = decodeURIComponent(card.getAttribute('data-folder-path'));
+                this.currentFolderNav = fPath;
+                this.applyFiltersAndRender();
+            });
+        });
+
+        // Render nested files inside current folder
+        if (filesInFolder.length > 0) {
+            var filesContainer = document.getElementById('folder-files-list');
+            if (filesContainer) {
+                this.renderAssetList(filesInFolder.slice(0, 50), filesContainer);
+            }
+        }
+    }
+
+    renderBreadcrumbs() {
+        var box = document.getElementById('breadcrumb-container');
+        if (!box) return;
+
+        var pathLib = typeof require !== 'undefined' ? require('path') : null;
+        var html = `<span class="breadcrumb-item ${!this.currentFolderNav ? 'active' : ''}" id="bc-root"><i class="fas fa-home"></i> Raiz</span>`;
+
+        if (this.currentFolderNav) {
+            var parts = this.currentFolderNav.split(/[\/\\]/).filter(Boolean);
+            var accumPath = "";
+
+            parts.forEach((part, idx) => {
+                if (idx === 0 && this.currentFolderNav.includes(':')) {
+                    accumPath = part + '\\';
+                } else {
+                    accumPath = pathLib ? pathLib.join(accumPath, part) : accumPath + '/' + part;
+                }
+
+                var isLast = (idx === parts.length - 1);
+                html += ` <span class="breadcrumb-sep"><i class="fas fa-chevron-right"></i></span> `;
+                html += `<span class="breadcrumb-item ${isLast ? 'active' : ''}" data-bc-path="${encodeURIComponent(accumPath)}">${part}</span>`;
+            });
+        }
+
+        box.innerHTML = html;
+
+        var bcRoot = document.getElementById('bc-root');
+        if (bcRoot) {
+            bcRoot.addEventListener('click', () => {
+                this.currentFolderNav = null;
+                this.applyFiltersAndRender();
+            });
+        }
+
+        box.querySelectorAll('.breadcrumb-item[data-bc-path]').forEach(item => {
+            item.addEventListener('click', () => {
+                var targetPath = decodeURIComponent(item.getAttribute('data-bc-path'));
+                this.currentFolderNav = targetPath;
+                this.applyFiltersAndRender();
+            });
+        });
+    }
+
+    /**
+     * Render Compact List View (Estilo Premiere Composer)
+     */
+    renderAssetList(assets, container) {
+        container.innerHTML = assets.map((asset, idx) => {
+            var isFav = window.cacheMgr.isFavorite(asset.path);
+            var isAudio = asset.type === 'sfx';
+
+            return `
+                <div class="asset-list-row" data-index="${idx}" data-path="${encodeURIComponent(asset.path)}">
+                    <div class="list-col-type">
+                        <i class="${isAudio ? 'fas fa-music' : 'fas fa-film'}" style="color:${isAudio ? 'var(--accent-emerald)' : 'var(--accent-cyan)'}"></i>
+                    </div>
+
+                    <div class="list-col-play">
+                        ${isAudio ? `
+                            <button class="btn-icon btn-play" title="Ouvir Preview">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+
+                    <div class="list-col-info">
+                        <span class="list-asset-name" title="${asset.name}">${asset.name}</span>
+                        <span class="list-asset-path" title="${asset.path}">${asset.path}</span>
+                    </div>
+
+                    <div class="list-col-meta">
+                        <span class="list-dur-badge" id="dur-list-${idx}">--:--</span>
+                        ${isAudio ? `<span class="list-peak-badge" id="peak-list-${idx}">-.- dB</span>` : ''}
+                    </div>
+
+                    <div class="list-col-actions">
+                        <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" title="Favorito">
+                            <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
+                        </button>
+                        
+                        ${isAudio ? `
+                            <button class="btn-icon btn-cut-silence" title="Cortar Silêncio e Substituir Arquivo" style="color:var(--accent-red);">
+                                <i class="fas fa-scissors"></i>
+                            </button>
+                        ` : ''}
+
+                        <button class="btn-insert" title="Inserir na Timeline do Premiere">
+                            <i class="fas fa-plus"></i> Inserir
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        this.bindAssetInteractions(assets, container, true);
+    }
+
+    /**
+     * Render Asset Grid Cards View (Current Visual Mode)
+     */
+    renderAssetGrid(assets, container) {
+        container.innerHTML = assets.map((asset, idx) => {
             var isFav = window.cacheMgr.isFavorite(asset.path);
             var isAudio = asset.type === 'sfx';
 
@@ -371,13 +680,18 @@ class ComposerApp {
             `;
         }).join('');
 
-        // Bind interactive events and populate cached/async waveforms
-        assets.forEach((asset, idx) => {
-            var card = grid.children[idx];
-            if (!card) return;
+        this.bindAssetInteractions(assets, container, false);
+    }
 
-            // Favorite Button
-            var btnFav = card.querySelector('.btn-fav');
+    /**
+     * Event & Waveform Handler Binding for Grid & List Elements
+     */
+    bindAssetInteractions(assets, container, isList = false) {
+        assets.forEach((asset, idx) => {
+            var itemEl = container.children[idx];
+            if (!itemEl) return;
+
+            var btnFav = itemEl.querySelector('.btn-fav');
             if (btnFav) {
                 btnFav.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -386,8 +700,7 @@ class ComposerApp {
                 });
             }
 
-            // Insert to Timeline Button
-            var btnInsert = card.querySelector('.btn-insert');
+            var btnInsert = itemEl.querySelector('.btn-insert');
             if (btnInsert) {
                 btnInsert.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -396,33 +709,30 @@ class ComposerApp {
             }
 
             if (asset.type === 'sfx') {
-                // Audio Waveform & Metadata Processing
-                var canvas = card.querySelector(`#canvas-${idx}`);
-                var durTag = card.querySelector(`#dur-${idx}`);
-                var peakTag = card.querySelector(`#peak-${idx}`);
-                var btnPlay = card.querySelector('.btn-play');
-                var btnCutSilence = card.querySelector('.btn-cut-silence');
+                var durTag = itemEl.querySelector(isList ? `#dur-list-${idx}` : `#dur-${idx}`);
+                var peakTag = itemEl.querySelector(isList ? `#peak-list-${idx}` : `#peak-${idx}`);
+                var btnPlay = itemEl.querySelector('.btn-play');
+                var btnCutSilence = itemEl.querySelector('.btn-cut-silence');
+                var canvas = isList ? null : itemEl.querySelector(`#canvas-${idx}`);
 
-                // Load from Cache or Process
                 var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
                 if (cached) {
                     if (durTag) durTag.textContent = this.formatTime(cached.duration);
                     if (peakTag) peakTag.textContent = `${cached.nativePeakDb} dB`;
-                    window.audioEngine.drawWaveform(canvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
+                    if (canvas) window.audioEngine.drawWaveform(canvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
                     asset.procData = cached;
                 } else {
-                    // Process Web Audio in Background
+                    // Lazy Audio Buffer Decode for active viewport
                     window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
                         var proc = window.audioEngine.processAudioBuffer(audioBuf);
                         window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
                         if (durTag) durTag.textContent = this.formatTime(proc.duration);
                         if (peakTag) peakTag.textContent = `${proc.nativePeakDb} dB`;
-                        window.audioEngine.drawWaveform(canvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
+                        if (canvas) window.audioEngine.drawWaveform(canvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
                         asset.procData = proc;
                     }).catch(() => {});
                 }
 
-                // Play Preview
                 if (btnPlay) {
                     btnPlay.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -430,7 +740,6 @@ class ComposerApp {
                     });
                 }
 
-                // CUT SILENCE & OVERWRITE FILE BUTTON
                 if (btnCutSilence) {
                     btnCutSilence.addEventListener('click', async (e) => {
                         e.stopPropagation();
@@ -445,7 +754,7 @@ class ComposerApp {
 
                                 if (durTag) durTag.textContent = this.formatTime(newProc.duration);
                                 if (peakTag) peakTag.textContent = `${newProc.nativePeakDb} dB`;
-                                window.audioEngine.drawWaveform(canvas, newProc.waveform, 0, newProc.silenceStartSec, newProc.silenceEndSec, newProc.duration);
+                                if (canvas) window.audioEngine.drawWaveform(canvas, newProc.waveform, 0, newProc.silenceStartSec, newProc.silenceEndSec, newProc.duration);
                                 
                                 btnCutSilence.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
                                 setTimeout(() => { btnCutSilence.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
@@ -456,11 +765,9 @@ class ComposerApp {
                         }
                     });
                 }
-
-            } else {
-                // Video Overlay Processing
-                var thumbImg = card.querySelector(`#thumb-${idx}`);
-                var durTagVideo = card.querySelector(`#dur-${idx}`);
+            } else if (!isList) {
+                var thumbImg = itemEl.querySelector(`#thumb-${idx}`);
+                var durTagVideo = itemEl.querySelector(`#dur-${idx}`);
                 
                 var cachedOverlay = window.cacheMgr.getOverlayCache(asset.path, asset.mtime);
                 if (cachedOverlay) {
@@ -476,15 +783,11 @@ class ComposerApp {
                     });
                 }
 
-                // Setup Hover Scrubbing
-                window.overlayEngine.setupHoverScrub(card, asset.path);
+                window.overlayEngine.setupHoverScrub(itemEl, asset.path);
             }
         });
     }
 
-    /**
-     * Play Audio Preview in Panel
-     */
     playAudioPreview(asset, canvas, btnPlay) {
         var btnMain = document.getElementById('btn-play-main');
         var playerTitle = document.getElementById('player-title');
@@ -506,9 +809,6 @@ class ComposerApp {
         });
     }
 
-    /**
-     * 1-Click Timeline Insertion via ExtendScript Bridge
-     */
     insertToTimeline(asset) {
         var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
         var nativePeak = (asset.procData && asset.procData.nativePeakDb) ? asset.procData.nativePeakDb : 0;
@@ -545,7 +845,6 @@ class ComposerApp {
     }
 }
 
-// Instantiate on DOM Loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new ComposerApp();
 });
