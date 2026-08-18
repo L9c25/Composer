@@ -121,9 +121,19 @@ var ComposerHost = {
                 applyGain = true;
             }
 
-            if (applyGain && typeof projectItem.setGain === "function") {
+            // Force Premiere Pro to refresh media cache for this item
+            if (typeof projectItem.refreshMedia === "function") {
+                try { projectItem.refreshMedia(); } catch (eRef) {}
+            }
+
+            // Apply gain to project item if supported
+            if (applyGain) {
                 try {
-                    projectItem.setGain(gainOffsetDb);
+                    if (typeof projectItem.setAudioGain === "function") {
+                        projectItem.setAudioGain(gainOffsetDb, 0);
+                    } else if (typeof projectItem.setGain === "function") {
+                        projectItem.setGain(gainOffsetDb);
+                    }
                 } catch (eGain) {}
             }
 
@@ -139,6 +149,7 @@ var ComposerHost = {
             // Use overwriteClip to place media without cutting/pushing existing clips!
             targetTrack.overwriteClip(projectItem, cti);
 
+            // Apply Audio Gain to the inserted clip in the timeline sequence
             if (mediaType === "sfx" && applyGain) {
                 try {
                     var clips = targetTrack.clips;
@@ -147,6 +158,20 @@ var ComposerHost = {
                         if (clipItem.projectItem && clipItem.projectItem.getMediaPath() === filePath) {
                             if (typeof clipItem.setAudioGain === "function") {
                                 clipItem.setAudioGain(gainOffsetDb);
+                            }
+                            // Apply to Volume Effect Component on the timeline clip
+                            if (clipItem.components) {
+                                for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
+                                    var comp = clipItem.components[compIdx];
+                                    if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
+                                        if (comp.properties && comp.properties.numItems > 0) {
+                                            var volProp = comp.properties[0];
+                                            if (volProp) {
+                                                volProp.setValue(gainOffsetDb, true);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -157,7 +182,7 @@ var ComposerHost = {
                 success: true,
                 insertedToSequence: true,
                 gainAppliedDb: applyGain ? gainOffsetDb.toFixed(2) : 0,
-                message: "Inserido com sucesso na timeline!"
+                message: applyGain ? "Inserido com sucesso! Ganho aplicado: " + gainOffsetDb.toFixed(1) + " dB" : "Inserido com sucesso na timeline!"
             });
 
         } catch (err) {

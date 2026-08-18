@@ -150,6 +150,7 @@ class AudioEngine {
         }
 
         var fs = require('fs');
+        var path = require('path');
         
         // 1. Decode original file
         var audioBuffer = await this.decodeAudioFile(filePath);
@@ -165,7 +166,7 @@ class AudioEngine {
 
         if (trimmedLength <= 0 || trimmedLength >= audioBuffer.length - 100) {
             console.log("[AudioEngine] Nenhum silêncio significativo detectado para cortar.");
-            return procInfo; // Nothing to trim
+            return { procInfo: procInfo, targetPath: filePath }; // Nothing to trim
         }
 
         // 3. Extract trimmed PCM arrays
@@ -178,19 +179,31 @@ class AudioEngine {
         // 4. Encode to 16-bit PCM WAV Buffer
         var wavBuffer = this.encodeWAV(trimmedChannels, sampleRate);
 
-        // 5. OVERWRITE ORIGINAL FILE ON DISK
-        fs.writeFileSync(filePath, wavBuffer);
-        console.log(`[AudioEngine] Arquivo substituído com sucesso no disco (${filePath}).`);
+        // 5. Target path: ensure valid .wav output format for Premiere compatibility
+        var targetPath = filePath;
+        var ext = path.extname(filePath).toLowerCase();
+        if (ext !== '.wav') {
+            targetPath = filePath.substring(0, filePath.length - ext.length) + '.wav';
+        }
+
+        // Write WAV buffer to disk
+        fs.writeFileSync(targetPath, wavBuffer);
+        console.log(`[AudioEngine] Arquivo WAV substituído/gerado com sucesso no disco (${targetPath}).`);
+
+        // If converted from MP3 to WAV, remove old MP3 if targetPath is different
+        if (targetPath !== filePath && fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch (eUnlink) {}
+        }
 
         // 6. Decode updated file to update cache & UI
-        var updatedAudioBuffer = await this.decodeAudioFile(filePath);
+        var updatedAudioBuffer = await this.decodeAudioFile(targetPath);
         var newProcInfo = this.processAudioBuffer(updatedAudioBuffer, silenceThresholdDb);
 
         // Update Cache
-        var stats = fs.statSync(filePath);
-        window.cacheMgr.setAudioCache(filePath, stats.mtimeMs, newProcInfo);
+        var stats = fs.statSync(targetPath);
+        window.cacheMgr.setAudioCache(targetPath, stats.mtimeMs, newProcInfo);
 
-        return newProcInfo;
+        return { procInfo: newProcInfo, targetPath: targetPath };
     }
 
     /**
@@ -240,13 +253,14 @@ class AudioEngine {
             for (var c = 0; c < numChannels; c++) {
                 var s = Math.max(-1, Math.min(1, channels[c][i]));
                 // Convert Float32 [-1.0, 1.0] to Int16 [-32768, 32767]
-                var val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                var rawVal = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                var val = Math.floor(rawVal);
                 view.setInt16(offset, val, true);
                 offset += 2;
             }
         }
 
-        return new Uint8Array(buffer);
+        return Buffer.from(buffer);
     }
 
     writeString(view, offset, string) {

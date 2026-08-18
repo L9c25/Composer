@@ -902,18 +902,22 @@ class ComposerApp {
                 if (btnCutSilence) {
                     btnCutSilence.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        if (confirm(`Deseja cortar o silêncio do arquivo "${asset.name}" e substituir o arquivo original no disco?`)) {
+                        if (confirm(`Deseja cortar o silêncio do arquivo "${asset.name}" e salvar em formato WAV limpo?`)) {
                             btnCutSilence.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
                             try {
                                 var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
-                                var newProc = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh);
+                                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh);
                                 
+                                asset.path = res.targetPath;
+                                asset.procData = res.procInfo;
                                 asset.mtime = Date.now();
-                                asset.procData = newProc;
+                                if (typeof require !== 'undefined') {
+                                    asset.name = require('path').basename(res.targetPath);
+                                }
 
-                                if (durTag) durTag.textContent = this.formatTime(newProc.duration);
-                                if (peakTag) peakTag.textContent = `${newProc.nativePeakDb} dB`;
-                                if (canvas) window.audioEngine.drawWaveform(canvas, newProc.waveform, 0, newProc.silenceStartSec, newProc.silenceEndSec, newProc.duration);
+                                if (durTag) durTag.textContent = this.formatTime(res.procInfo.duration);
+                                if (peakTag) peakTag.textContent = `${res.procInfo.nativePeakDb} dB`;
+                                if (canvas) window.audioEngine.drawWaveform(canvas, res.procInfo.waveform, 0, res.procInfo.silenceStartSec, res.procInfo.silenceEndSec, res.procInfo.duration);
                                 
                                 btnCutSilence.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
                                 setTimeout(() => { btnCutSilence.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
@@ -984,9 +988,25 @@ class ComposerApp {
         });
     }
 
-    insertToTimeline(asset) {
+    async insertToTimeline(asset) {
         var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
-        var nativePeak = (asset.procData && asset.procData.nativePeakDb) ? asset.procData.nativePeakDb : 0;
+
+        // Ensure procData and nativePeakDb are computed prior to script call
+        if (!asset.procData && asset.type === 'sfx') {
+            var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
+            if (cached) {
+                asset.procData = cached;
+            } else {
+                try {
+                    var audioBuf = await window.audioEngine.decodeAudioFile(asset.path);
+                    var proc = window.audioEngine.processAudioBuffer(audioBuf);
+                    window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
+                    asset.procData = proc;
+                } catch (e) {}
+            }
+        }
+
+        var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
 
         var scriptCall = `ComposerHost.importAndInsertAsset("${asset.path.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak})`;
         
