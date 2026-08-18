@@ -85,19 +85,24 @@ class AudioEngine {
             }
         }
 
-        // 3. Detect Silence Cut Points
+        // 3. Detect Silence Cut Points with 5ms window precision
         var thresholdAmp = Math.pow(10, silenceThresholdDb / 20.0);
+        var windowSize = Math.max(1, Math.floor(sampleRate * 0.005)); // 5ms window
         var firstActiveSample = 0;
         var lastActiveSample = totalSamples - 1;
 
-        // Scan forward
-        for (var i = 0; i < totalSamples; i += 1) {
+        // Scan forward in 5ms windows
+        for (var i = 0; i < totalSamples; i += windowSize) {
+            var windowEnd = Math.min(i + windowSize, totalSamples);
             var isSilent = true;
-            for (var c = 0; c < numChannels; c++) {
-                if (Math.abs(channelsData[c][i]) >= thresholdAmp) {
-                    isSilent = false;
-                    break;
+            for (var j = i; j < windowEnd; j++) {
+                for (var c = 0; c < numChannels; c++) {
+                    if (Math.abs(channelsData[c][j]) >= thresholdAmp) {
+                        isSilent = false;
+                        break;
+                    }
                 }
+                if (!isSilent) break;
             }
             if (!isSilent) {
                 firstActiveSample = i;
@@ -105,29 +110,33 @@ class AudioEngine {
             }
         }
 
-        // Scan backward
-        for (var i = totalSamples - 1; i >= firstActiveSample; i -= 1) {
+        // Scan backward in 5ms windows
+        for (var i = totalSamples - windowSize; i >= firstActiveSample; i -= windowSize) {
+            var windowEnd = Math.min(i + windowSize, totalSamples);
             var isSilent = true;
-            for (var c = 0; c < numChannels; c++) {
-                if (Math.abs(channelsData[c][i]) >= thresholdAmp) {
-                    isSilent = false;
-                    break;
+            for (var j = i; j < windowEnd; j++) {
+                for (var c = 0; c < numChannels; c++) {
+                    if (Math.abs(channelsData[c][j]) >= thresholdAmp) {
+                        isSilent = false;
+                        break;
+                    }
                 }
+                if (!isSilent) break;
             }
             if (!isSilent) {
-                lastActiveSample = i;
+                lastActiveSample = Math.min(totalSamples - 1, i + windowSize);
                 break;
             }
         }
 
-        // Safety padding (30ms)
-        var paddingSamples = Math.floor(sampleRate * 0.03);
+        // Safety padding (5ms)
+        var paddingSamples = Math.floor(sampleRate * 0.005);
         var trimmedStartSample = Math.max(0, firstActiveSample - paddingSamples);
         var trimmedEndSample = Math.min(totalSamples - 1, lastActiveSample + paddingSamples);
 
         var silenceStartSec = trimmedStartSample / sampleRate;
         var silenceEndSec = trimmedEndSample / sampleRate;
-        var hasSilence = (silenceStartSec > 0.02) || (silenceEndSec < duration - 0.02);
+        var hasSilence = (silenceStartSec > 0.01) || (silenceEndSec < duration - 0.01);
 
         return {
             duration: duration,
@@ -167,13 +176,25 @@ class AudioEngine {
         var sliceStart = trimmedLength > 0 ? startSample : 0;
         var sliceEnd = trimmedLength > 0 ? endSample : audioBuffer.length;
 
-        // 3. Extract trimmed PCM arrays & compute max peak for normalization
+        // 3. Extract trimmed PCM arrays & apply 3ms micro fade-in/fade-out anti-click
         var trimmedChannels = [];
         var maxAmp = 0;
+        var fadeLength = Math.min(Math.floor(sampleRate * 0.003), sliceLength); // 3ms micro fade
 
         for (var c = 0; c < numChannels; c++) {
             var fullData = audioBuffer.getChannelData(c);
             var sliced = new Float32Array(fullData.subarray(sliceStart, sliceEnd));
+
+            // Apply 3ms micro fade-in
+            for (var f = 0; f < fadeLength; f++) {
+                sliced[f] *= (f / fadeLength);
+            }
+            // Apply 3ms micro fade-out
+            for (var f = 0; f < fadeLength; f++) {
+                var idx = sliced.length - 1 - f;
+                if (idx >= 0) sliced[idx] *= (f / fadeLength);
+            }
+
             for (var i = 0; i < sliced.length; i++) {
                 var absV = Math.abs(sliced[i]);
                 if (absV > maxAmp) maxAmp = absV;
