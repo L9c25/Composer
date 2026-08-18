@@ -773,8 +773,8 @@ class ComposerApp {
             var asset = this.allAssets.find(a => a.path === fPath);
 
             if (asset && asset.type === 'sfx') {
-                var durTag = row.querySelector(`#dur-tree-${encodeURIComponent(fPath)}`);
-                var peakTag = row.querySelector(`#peak-tree-${encodeURIComponent(fPath)}`);
+                var durTag = row.querySelector('.list-dur-badge');
+                var peakTag = row.querySelector('.list-peak-badge');
                 var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
                 if (cached) {
                     if (durTag) durTag.textContent = this.formatTime(cached.duration);
@@ -899,9 +899,52 @@ class ComposerApp {
 
     /**
      * Render Compact List View (Estilo Premiere Composer)
+     * Inclui exibição de subpastas no topo se houver subpastas na visualização ativa
      */
     renderAssetList(assets, container) {
-        container.innerHTML = assets.map((asset, idx) => {
+        var pathLib = typeof require !== 'undefined' ? require('path') : null;
+        var activeFolder = this.selectedSidebarFolder || this.currentFolderNav;
+        var subfolderPaths = new Set();
+
+        if (activeFolder) {
+            this.allAssets.forEach(a => {
+                if (a.path.startsWith(activeFolder) && a.path !== activeFolder) {
+                    var rel = a.path.substring(activeFolder.length).replace(/^[\/\\]/, '');
+                    var parts = rel.split(/[\/\\]/);
+                    if (parts.length > 1) {
+                        var childSub = pathLib ? pathLib.join(activeFolder, parts[0]) : activeFolder + '/' + parts[0];
+                        subfolderPaths.add(childSub);
+                    }
+                }
+            });
+        }
+
+        var subfolders = Array.from(subfolderPaths).sort();
+        var html = "";
+
+        // Render Subfolders at top of List View if present
+        subfolders.forEach(subP => {
+            var fName = pathLib ? pathLib.basename(subP) : subP.split(/[\/\\]/).pop();
+            var count = this.allAssets.filter(a => a.path.startsWith(subP)).length;
+
+            html += `
+                <div class="asset-list-row folder-list-row" data-subfolder-path="${encodeURIComponent(subP)}" style="cursor:pointer; background:rgba(245, 158, 11, 0.05);">
+                    <span style="width:16px;"></span>
+                    <div class="list-col-type">
+                        <i class="fas fa-folder" style="color:#f59e0b;"></i>
+                    </div>
+                    <div class="list-col-info">
+                        <span class="list-asset-name" style="font-weight:600; color:#fff;">${fName}</span>
+                    </div>
+                    <div class="list-col-meta">
+                        <span class="composer-count-badge">${count} itens</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        // Render Files
+        html += assets.map((asset, idx) => {
             var isFav = window.cacheMgr.isFavorite(asset.path);
             var isAudio = asset.type === 'sfx';
 
@@ -934,6 +977,19 @@ class ComposerApp {
                 </div>
             `;
         }).join('');
+
+        container.innerHTML = html;
+
+        // Bind Subfolder click navigation
+        container.querySelectorAll('.folder-list-row[data-subfolder-path]').forEach(row => {
+            row.addEventListener('click', () => {
+                var subP = decodeURIComponent(row.getAttribute('data-subfolder-path'));
+                this.selectedSidebarFolder = subP;
+                this.currentFolderNav = subP;
+                this.renderFoldersList();
+                this.applyFiltersAndRender();
+            });
+        });
 
         this.bindAssetInteractions(assets, container, true);
     }
