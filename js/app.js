@@ -1067,12 +1067,67 @@ class ComposerApp {
                 window.overlayEngine.setupHoverScrub(itemEl, asset.path);
             }
         });
+        var btnInsertMain = document.getElementById('btn-insert-main');
+        if (btnInsertMain) {
+            btnInsertMain.addEventListener('click', () => {
+                if (this.selectedAsset) {
+                    this.insertToTimeline(this.selectedAsset);
+                } else if (this.allAssets.length > 0) {
+                    this.insertToTimeline(this.allAssets[0]);
+                } else {
+                    alert("Nenhum áudio selecionado para inserir.");
+                }
+            });
+        }
+
+        var btnPlayMain = document.getElementById('btn-play-main');
+        if (btnPlayMain) {
+            btnPlayMain.addEventListener('click', () => {
+                if (this.selectedAsset) {
+                    this.playAudioPreview(this.selectedAsset, null, null);
+                } else if (this.allAssets.length > 0) {
+                    this.playAudioPreview(this.allAssets[0], null, null);
+                }
+            });
+        }
+
+        this.renderFoldersList();
+    }
+
+    selectAndDrawPlayerAsset(asset) {
+        this.selectedAsset = asset;
+        var playerTitle = document.getElementById('player-title');
+        var mainCanvas = document.getElementById('player-waveform-canvas');
+
+        if (playerTitle) playerTitle.textContent = asset.name;
+
+        if (mainCanvas && asset.type === 'sfx') {
+            if (asset.procData) {
+                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+            } else {
+                var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
+                if (cached) {
+                    asset.procData = cached;
+                    window.audioEngine.drawWaveform(mainCanvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
+                } else {
+                    window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
+                        var proc = window.audioEngine.processAudioBuffer(audioBuf);
+                        window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
+                        asset.procData = proc;
+                        window.audioEngine.drawWaveform(mainCanvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
+                    }).catch(() => {});
+                }
+            }
+        }
     }
 
     playAudioPreview(asset, canvas, btnPlay) {
         var btnMain = document.getElementById('btn-play-main');
         var playerTitle = document.getElementById('player-title');
-        
+        var mainCanvas = document.getElementById('player-waveform-canvas');
+
+        this.selectAndDrawPlayerAsset(asset);
+
         // If clicking on the asset that is CURRENTLY playing, pause/stop it!
         if (window.audioEngine.currentSoundPath === asset.path) {
             window.audioEngine.stopAudioPreview();
@@ -1080,6 +1135,9 @@ class ComposerApp {
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+            }
+            if (mainCanvas && asset.procData) {
+                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
             }
             return;
         }
@@ -1097,11 +1155,17 @@ class ComposerApp {
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
             }
+            if (mainCanvas && asset.procData) {
+                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
+            }
         }, () => {
             if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+            }
+            if (mainCanvas && asset.procData) {
+                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
             }
         });
     }

@@ -164,6 +164,11 @@
 
             <!-- Player Bar Footer -->
             <footer class="player-bar">
+                <!-- Waveform Display Box (Estilo Premiere Composer) -->
+                <div class="player-waveform-box" id="player-waveform-box">
+                    <canvas id="player-waveform-canvas" class="player-waveform-canvas"></canvas>
+                </div>
+
                 <div class="player-top-row">
                     <div class="player-info">
                         <div class="player-title-box">
@@ -174,8 +179,11 @@
 
                     <div class="player-controls">
                         <div class="player-buttons">
-                            <button class="btn-play-main" id="btn-play-main">
+                            <button class="btn-play-main" id="btn-play-main" title="Tocar / Pausar">
                                 <i class="fas fa-play"></i>
+                            </button>
+                            <button class="btn-insert-main" id="btn-insert-main" title="Inserir na Timeline do Premiere">
+                                <i class="fas fa-plus"></i> Inserir
                             </button>
                         </div>
                     </div>
