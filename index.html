@@ -12,13 +12,16 @@
 
     <div class="app-container">
         <!-- Sidebar Navigation -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="brand-header">
                 <div class="brand-logo">FX</div>
-                <div>
+                <div style="flex:1;">
                     <div class="brand-title">Composer FX</div>
                     <div class="brand-version">Premiere 2025 (25.4)</div>
                 </div>
+                <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" title="Recolher Barra Lateral">
+                    <i class="fas fa-indent"></i>
+                </button>
             </div>
 
             <!-- Main Categories -->
@@ -97,6 +100,10 @@
         <main class="main-content">
             <!-- Top Search Header -->
             <header class="top-header">
+                <button class="btn-sidebar-expand" id="btn-expand-sidebar" title="Expandir Barra Lateral" style="display: none;">
+                    <i class="fas fa-outdent"></i>
+                </button>
+
                 <div class="search-box">
                     <i class="fas fa-search search-icon"></i>
                     <input type="text" id="search-input" class="search-input" placeholder="Buscar efeitos sonoros, overlays ou pastas..." autocomplete="off">
@@ -108,13 +115,13 @@
                     <button class="btn-pill" data-filter="overlay">OVERLAYS</button>
                     
                     <div class="view-mode-group" id="view-mode-group">
-                        <button class="btn-view-mode active" data-view="grid" title="Visualização em Grid">
+                        <button class="btn-view-mode" data-view="grid" title="Visualização em Grid">
                             <i class="fas fa-th-large"></i>
                         </button>
                         <button class="btn-view-mode" data-view="list" title="Visualização em Lista">
                             <i class="fas fa-list"></i>
                         </button>
-                        <button class="btn-view-mode" data-view="folder" title="Navegar por Pastas">
+                        <button class="btn-view-mode active" data-view="folder" title="Navegar por Pastas">
                             <i class="fas fa-folder-tree"></i>
                         </button>
                     </div>

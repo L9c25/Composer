@@ -10,7 +10,7 @@ class ComposerApp {
         this.allAssets = [];        // Complete scanned assets list
         this.filteredAssets = [];   // Search & filter results
         this.currentFilter = 'all'; // all, sfx, overlay, favorites
-        this.viewMode = 'grid';     // grid, list, folder
+        this.viewMode = 'folder';   // Default to Folder Navigation View ("Navegar por Pastas")
         this.currentFolderNav = null; // null = Root, or string path for main folder view
         this.selectedSidebarFolder = null; // Selected folder path in sidebar tree
         this.expandedSidebarNodes = new Set(); // Set of expanded folder paths in sidebar
@@ -28,6 +28,12 @@ class ComposerApp {
     }
 
     initUI() {
+        // Restore Sidebar Collapsed state preference
+        var isSidebarCollapsed = window.cacheMgr.getSetting('sidebarCollapsed', false);
+        if (isSidebarCollapsed) {
+            this.setSidebarCollapsed(true);
+        }
+
         // Load saved Max Peak Target setting (Default -6.0 dB)
         var savedMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
         var slider = document.getElementById('slider-max-peak');
@@ -62,6 +68,41 @@ class ComposerApp {
             headerFolders.addEventListener('click', () => {
                 sectionFolders.classList.toggle('collapsed');
             });
+        }
+
+        // Full Sidebar Collapse / Expand Toggle Buttons
+        var btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+        var btnExpandSidebar = document.getElementById('btn-expand-sidebar');
+
+        if (btnToggleSidebar) {
+            btnToggleSidebar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.setSidebarCollapsed(true);
+            });
+        }
+
+        if (btnExpandSidebar) {
+            btnExpandSidebar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.setSidebarCollapsed(false);
+            });
+        }
+    }
+
+    setSidebarCollapsed(collapsed) {
+        var sidebar = document.getElementById('sidebar');
+        var btnExpand = document.getElementById('btn-expand-sidebar');
+
+        if (sidebar) {
+            if (collapsed) {
+                sidebar.classList.add('collapsed');
+                if (btnExpand) btnExpand.style.display = 'flex';
+                window.cacheMgr.setSetting('sidebarCollapsed', true);
+            } else {
+                sidebar.classList.remove('collapsed');
+                if (btnExpand) btnExpand.style.display = 'none';
+                window.cacheMgr.setSetting('sidebarCollapsed', false);
+            }
         }
     }
 
