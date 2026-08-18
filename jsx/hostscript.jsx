@@ -154,15 +154,9 @@ var ComposerHost = {
             // Use overwriteClip to place media without cutting/pushing existing clips!
             targetTrack.overwriteClip(projectItem, cti);
 
-            // Apply Pitch, Reverse & Gain to inserted track clip item in timeline
-            if (mediaType === "sfx") {
+            // Apply Volume Gain Normalization to inserted track clip item in timeline
+            if (mediaType === "sfx" && applyGain) {
                 try {
-                    var pitchVal = parseFloat(pitchSemitones) || 0;
-                    var reverseVal = (isReverse === true || isReverse === "true" || isReverse === 1 || isReverse === "1");
-
-                    var pitchRatio = Math.pow(2, pitchVal / 12.0);
-                    var finalSpeed = reverseVal ? -1.0 * pitchRatio : pitchRatio;
-
                     var targetPathNorm = (filePath || "").replace(/\\/g, '/').toLowerCase();
                     var clips = targetTrack.clips;
 
@@ -182,45 +176,29 @@ var ComposerHost = {
                         }
 
                         if (isMatch) {
-                            // Apply pitch & reverse speed natively to sequence clip in timeline
-                            if (pitchVal !== 0 || reverseVal) {
-                                try {
-                                    if (typeof clipItem.setSpeed === "function") {
-                                        clipItem.setSpeed(finalSpeed, 0, false, false);
-                                    }
-                                } catch (eSpeed1) {
-                                    try {
-                                        if (typeof clipItem.setSpeed === "function") {
-                                            clipItem.setSpeed(finalSpeed);
-                                        }
-                                    } catch (eSpeed2) {}
+                            try {
+                                if (typeof clipItem.setAudioGain === "function") {
+                                    clipItem.setAudioGain(gainOffsetDb);
                                 }
-                            }
+                            } catch (eAudioGain) {}
 
-                            // Apply gain offset to clip volume component
-                            if (applyGain) {
-                                try {
-                                    if (typeof clipItem.setAudioGain === "function") {
-                                        clipItem.setAudioGain(gainOffsetDb);
-                                    }
-                                } catch (eAudioGain) {}
-
-                                try {
-                                    if (clipItem.components) {
-                                        for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
-                                            var comp = clipItem.components[compIdx];
-                                            if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
-                                                if (comp.properties && comp.properties.numItems > 0) {
-                                                    var volProp = comp.properties[0];
-                                                    if (volProp) {
-                                                        volProp.setValue(gainOffsetDb, true);
-                                                    }
+                            try {
+                                if (clipItem.components) {
+                                    for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
+                                        var comp = clipItem.components[compIdx];
+                                        if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
+                                            if (comp.properties && comp.properties.numItems > 0) {
+                                                var volProp = comp.properties[0];
+                                                if (volProp) {
+                                                    volProp.setValue(gainOffsetDb, true);
                                                 }
                                             }
                                         }
                                     }
-                                } catch (eVolComp) {}
-                            }
+                                }
+                            } catch (eVolComp) {}
+                            
+                            break; // Stop after updating the inserted clip!
                         }
                     }
                 } catch (eClipGain) {}
