@@ -28,6 +28,65 @@ var ComposerHost = {
     },
 
     /**
+     * Find a track that is completely free at CTI position, or create a new track
+     */
+    findOrCreateTargetTrack: function(activeSeq, mediaType, cti) {
+        var isAudio = (mediaType !== "overlay");
+        var tracks = isAudio ? activeSeq.audioTracks : activeSeq.videoTracks;
+        if (!tracks || tracks.numTracks === 0) return null;
+        var numTracks = tracks.numTracks;
+
+        // 1. Check for a completely empty track (0 clips)
+        for (var i = 0; i < numTracks; i++) {
+            if (tracks[i].clips.numItems === 0) {
+                return tracks[i];
+            }
+        }
+
+        // 2. Check for a track that has NO clips overlapping the CTI position
+        for (var j = 0; j < numTracks; j++) {
+            var trackCandidate = tracks[j];
+            var isOccupiedAtCti = false;
+            var clips = trackCandidate.clips;
+            for (var c = 0; c < clips.numItems; c++) {
+                var clip = clips[c];
+                var startSec = clip.start.seconds;
+                var endSec = clip.end.seconds;
+                if (cti.seconds >= startSec - 0.05 && cti.seconds < endSec) {
+                    isOccupiedAtCti = true;
+                    break;
+                }
+            }
+            if (!isOccupiedAtCti) {
+                return trackCandidate;
+            }
+        }
+
+        // 3. If all existing tracks are occupied at CTI, try creating a NEW track in Premiere
+        try {
+            app.enableQE();
+            if (typeof qe !== "undefined" && qe.project) {
+                var qeSeq = qe.project.getActiveSequence();
+                if (qeSeq) {
+                    if (isAudio) {
+                        if (typeof qeSeq.addAudioTrack === "function") {
+                            qeSeq.addAudioTrack();
+                        }
+                    } else {
+                        if (typeof qeSeq.addVideoTrack === "function") {
+                            qeSeq.addVideoTrack();
+                        }
+                    }
+                }
+            }
+        } catch (eQE) {}
+
+        // Return top track (or newly added track)
+        tracks = isAudio ? activeSeq.audioTracks : activeSeq.videoTracks;
+        return tracks[tracks.numTracks - 1];
+    },
+
+    /**
      * Import asset to Project Bin and insert into Active Sequence at Playhead (CTI)
      * Applies Audio Gain Normalization automatically if audio.
      */
@@ -39,12 +98,10 @@ var ComposerHost = {
 
             var activeSeq = app.project.activeSequence;
             if (!activeSeq) {
-                // If no sequence is active, import into Project panel bin
                 app.project.importFiles([filePath], true, app.project.rootItem, false);
                 return JSON.stringify({ success: true, insertedToSequence: false, message: "Importado para o painel Projeto (Nenhuma sequência ativa)." });
             }
 
-            // Check if item is already in project, otherwise import it
             var projectItem = this.findProjectItemByPath(app.project.rootItem, filePath);
             if (!projectItem) {
                 var importSuccess = app.project.importFiles([filePath], true, app.project.rootItem, false);
@@ -57,7 +114,6 @@ var ComposerHost = {
                 return JSON.stringify({ success: false, error: "Falha ao importar arquivo no Premiere Pro." });
             }
 
-            // Calculate gain offset if target gain is specified
             var gainOffsetDb = 0;
             var applyGain = false;
             if (mediaType === "sfx" && targetMaxPeakDb !== null && nativePeakDb !== null && !isNaN(targetMaxPeakDb) && !isNaN(nativePeakDb)) {
@@ -65,49 +121,36 @@ var ComposerHost = {
                 applyGain = true;
             }
 
-            // Apply gain to project item if supported
             if (applyGain && typeof projectItem.setGain === "function") {
                 try {
                     projectItem.setGain(gainOffsetDb);
-                } catch (eGain) {
-                    // Fail gracefully if projectItem.setGain isn't supported on current track item
-                }
+                } catch (eGain) {}
             }
 
             // Get Current Time Indicator (Playhead position)
             var cti = activeSeq.getPlayerPosition();
 
-            if (mediaType === "overlay") {
-                // Insert into Video Track 1 (or top available video track)
-                var videoTrack = activeSeq.videoTracks[0];
-                if (videoTrack) {
-                    videoTrack.insertClip(projectItem, cti);
-                } else {
-                    return JSON.stringify({ success: false, error: "Nenhuma faixa de vídeo encontrada na sequência." });
-                }
-            } else {
-                // Insert into Audio Track 1
-                var audioTrack = activeSeq.audioTracks[0];
-                if (audioTrack) {
-                    audioTrack.insertClip(projectItem, cti);
-                    
-                    // Also try applying audio gain to the sequence clip item if supported
-                    if (applyGain) {
-                        try {
-                            var clips = audioTrack.clips;
-                            for (var c = 0; c < clips.numItems; c++) {
-                                var clip = clips[c];
-                                if (clip.projectItem && clip.projectItem.getMediaPath() === filePath) {
-                                    if (typeof clip.setAudioGain === "function") {
-                                        clip.setAudioGain(gainOffsetDb);
-                                    }
-                                }
+            // Find an empty/unoccupied track at CTI or create a new track
+            var targetTrack = this.findOrCreateTargetTrack(activeSeq, mediaType, cti);
+            if (!targetTrack) {
+                return JSON.stringify({ success: false, error: "Nenhuma faixa livre disponível na sequência." });
+            }
+
+            // Use overwriteClip to place media without cutting/pushing existing clips!
+            targetTrack.overwriteClip(projectItem, cti);
+
+            if (mediaType === "sfx" && applyGain) {
+                try {
+                    var clips = targetTrack.clips;
+                    for (var c = 0; c < clips.numItems; c++) {
+                        var clipItem = clips[c];
+                        if (clipItem.projectItem && clipItem.projectItem.getMediaPath() === filePath) {
+                            if (typeof clipItem.setAudioGain === "function") {
+                                clipItem.setAudioGain(gainOffsetDb);
                             }
-                        } catch (eClipGain) {}
+                        }
                     }
-                } else {
-                    return JSON.stringify({ success: false, error: "Nenhuma faixa de áudio encontrada na sequência." });
-                }
+                } catch (eClipGain) {}
             }
 
             return JSON.stringify({

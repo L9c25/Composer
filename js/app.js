@@ -910,16 +910,32 @@ class ComposerApp {
         var btnMain = document.getElementById('btn-play-main');
         var playerTitle = document.getElementById('player-title');
         
+        // If clicking on the asset that is CURRENTLY playing, pause/stop it!
+        if (window.audioEngine.currentSoundPath === asset.path) {
+            window.audioEngine.stopAudioPreview();
+            if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
+            if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
+            if (canvas && asset.procData) {
+                window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+            }
+            return;
+        }
+
+        // Reset previous buttons if another sound was playing
+        document.querySelectorAll('.btn-play').forEach(btn => {
+            btn.innerHTML = `<i class="fas fa-play"></i>`;
+        });
+
         if (playerTitle) playerTitle.textContent = asset.name;
         if (btnMain) btnMain.innerHTML = `<i class="fas fa-stop"></i>`;
-        btnPlay.innerHTML = `<i class="fas fa-stop"></i>`;
+        if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-stop"></i>`;
 
         window.audioEngine.playAudioPreview(asset.path, (pct, elapsed, duration) => {
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
             }
         }, () => {
-            btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
+            if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
             if (canvas && asset.procData) {
                 window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
