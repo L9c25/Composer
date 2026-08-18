@@ -1190,18 +1190,10 @@ class ComposerApp {
         }
 
         var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
+        var pitch = (asset.type === 'sfx' && this.pitchSemitones) ? this.pitchSemitones : 0;
+        var rev = (asset.type === 'sfx' && this.isReverse) ? true : false;
 
-        // If Pitch or Reverse is enabled, generate processed audio file for insertion
-        var insertPath = asset.path;
-        if (asset.type === 'sfx' && (this.pitchSemitones !== 0 || this.isReverse)) {
-            try {
-                insertPath = await window.audioEngine.generateProcessedWAV(asset.path, this.pitchSemitones, this.isReverse);
-            } catch (eProc) {
-                console.error("Error generating pitch/reverse WAV:", eProc);
-            }
-        }
-
-        var scriptCall = `ComposerHost.importAndInsertAsset("${insertPath.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak})`;
+        var scriptCall = `ComposerHost.importAndInsertAsset("${asset.path.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak}, ${pitch}, ${rev})`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
             try {

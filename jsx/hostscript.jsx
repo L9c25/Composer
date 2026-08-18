@@ -90,7 +90,7 @@ var ComposerHost = {
      * Import asset to Project Bin and insert into Active Sequence at Playhead (CTI)
      * Applies Audio Gain Normalization automatically if audio.
      */
-    importAndInsertAsset: function(filePath, mediaType, targetMaxPeakDb, nativePeakDb) {
+    importAndInsertAsset: function(filePath, mediaType, targetMaxPeakDb, nativePeakDb, pitchSemitones, isReverse) {
         try {
             if (!app.project) {
                 return JSON.stringify({ success: false, error: "Nenhum projeto aberto no Premiere Pro." });
@@ -149,25 +149,40 @@ var ComposerHost = {
             // Use overwriteClip to place media without cutting/pushing existing clips!
             targetTrack.overwriteClip(projectItem, cti);
 
-            // Apply Audio Gain to the inserted clip in the timeline sequence
-            if (mediaType === "sfx" && applyGain) {
+            // Apply Pitch, Reverse & Gain to inserted track clip item in timeline
+            if (mediaType === "sfx") {
                 try {
+                    var pitchVal = parseFloat(pitchSemitones) || 0;
+                    var reverseVal = (isReverse === true || isReverse === "true" || isReverse === 1 || isReverse === "1");
+
+                    var pitchRatio = Math.pow(2, pitchVal / 12.0);
+                    var finalSpeed = reverseVal ? -1.0 * pitchRatio : pitchRatio;
+
                     var clips = targetTrack.clips;
                     for (var c = 0; c < clips.numItems; c++) {
                         var clipItem = clips[c];
                         if (clipItem.projectItem && clipItem.projectItem.getMediaPath() === filePath) {
-                            if (typeof clipItem.setAudioGain === "function") {
-                                clipItem.setAudioGain(gainOffsetDb);
+                            // Apply pitch & reverse speed natively to sequence clip in timeline
+                            if (pitchVal !== 0 || reverseVal) {
+                                if (typeof clipItem.setSpeed === "function") {
+                                    clipItem.setSpeed(finalSpeed, 0, false, false);
+                                }
                             }
-                            // Apply to Volume Effect Component on the timeline clip
-                            if (clipItem.components) {
-                                for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
-                                    var comp = clipItem.components[compIdx];
-                                    if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
-                                        if (comp.properties && comp.properties.numItems > 0) {
-                                            var volProp = comp.properties[0];
-                                            if (volProp) {
-                                                volProp.setValue(gainOffsetDb, true);
+
+                            // Apply gain offset to clip volume component
+                            if (applyGain) {
+                                if (typeof clipItem.setAudioGain === "function") {
+                                    clipItem.setAudioGain(gainOffsetDb);
+                                }
+                                if (clipItem.components) {
+                                    for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
+                                        var comp = clipItem.components[compIdx];
+                                        if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
+                                            if (comp.properties && comp.properties.numItems > 0) {
+                                                var volProp = comp.properties[0];
+                                                if (volProp) {
+                                                    volProp.setValue(gainOffsetDb, true);
+                                                }
                                             }
                                         }
                                     }
