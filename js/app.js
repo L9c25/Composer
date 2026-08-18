@@ -596,16 +596,16 @@ class ComposerApp {
     }
 
     /**
-     * Render Folder Tree & Subdirectories View in Main Content Area
+     * Render Full File Tree Explorer in Main View (Estilo Premiere Composer Oficial)
      */
     renderFolderView(container) {
-        container.className = 'folder-tree-grid';
+        container.className = 'composer-tree-view';
         var pathLib = typeof require !== 'undefined' ? require('path') : null;
         var userFolders = window.cacheMgr.getFolders();
 
         if (userFolders.length === 0) {
             container.innerHTML = `
-                <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="empty-state" style="padding:40px;">
                     <i class="fas fa-folder-plus empty-icon"></i>
                     <h3>Nenhuma pasta local vinculada</h3>
                     <p>Clique em "+ Adicionar Pasta" na barra lateral para começar.</p>
@@ -614,74 +614,142 @@ class ComposerApp {
             return;
         }
 
-        var subfoldersMap = new Map();
-        var filesInFolder = [];
+        // Expanded tree nodes set for main view
+        if (!this.expandedMainTreeNodes) {
+            this.expandedMainTreeNodes = new Set(userFolders);
+        }
 
-        var targetDir = this.currentFolderNav || this.selectedSidebarFolder;
+        var buildComposerTreeNode = (dirPath) => {
+            var name = pathLib ? pathLib.basename(dirPath) : dirPath.split(/[\/\\]/).pop();
+            var isExpanded = this.expandedMainTreeNodes.has(dirPath);
 
-        if (!targetDir) {
-            userFolders.forEach(fPath => {
-                var name = pathLib ? pathLib.basename(fPath) : fPath.split(/[\/\\]/).pop();
-                var count = this.allAssets.filter(a => a.path.startsWith(fPath)).length;
-                subfoldersMap.set(fPath, { name: name, fullPath: fPath, count: count });
-            });
-        } else {
-            this.allAssets.forEach(asset => {
-                if (asset.path.startsWith(targetDir) && asset.path !== targetDir) {
-                    var rel = asset.path.substring(targetDir.length).replace(/^[\/\\]/, '');
+            // Find direct child subfolders & files of dirPath
+            var subfolderPaths = new Set();
+            var directFiles = [];
+
+            this.filteredAssets.forEach(asset => {
+                if (asset.path.startsWith(dirPath) && asset.path !== dirPath) {
+                    var rel = asset.path.substring(dirPath.length).replace(/^[\/\\]/, '');
                     var parts = rel.split(/[\/\\]/);
-
                     if (parts.length > 1) {
-                        var subName = parts[0];
-                        var subFullPath = pathLib ? pathLib.join(targetDir, subName) : targetDir + '/' + subName;
-                        if (!subfoldersMap.has(subFullPath)) {
-                            subfoldersMap.set(subFullPath, { name: subName, fullPath: subFullPath, count: 0 });
-                        }
-                        subfoldersMap.get(subFullPath).count++;
+                        var childSub = pathLib ? pathLib.join(dirPath, parts[0]) : dirPath + '/' + parts[0];
+                        subfolderPaths.add(childSub);
                     } else {
-                        filesInFolder.push(asset);
+                        directFiles.push(asset);
                     }
                 }
             });
-        }
 
-        var html = '';
+            var subfolders = Array.from(subfolderPaths).sort();
+            var hasChildren = (subfolders.length > 0 || directFiles.length > 0);
 
-        subfoldersMap.forEach((info) => {
+            var html = `<div class="composer-tree-node">`;
             html += `
-                <div class="folder-card" data-folder-path="${encodeURIComponent(info.fullPath)}">
-                    <i class="fas fa-folder folder-card-icon"></i>
-                    <div class="folder-card-info">
-                        <span class="folder-card-name" title="${info.name}">${info.name}</span>
-                        <span class="folder-card-count">${info.count.toLocaleString()} itens</span>
-                    </div>
+                <div class="composer-tree-row folder-row" data-main-folder="${encodeURIComponent(dirPath)}">
+                    ${hasChildren ? 
+                        `<span class="composer-chevron ${isExpanded ? 'expanded' : ''}">
+                            <i class="fas fa-chevron-right"></i>
+                        </span>` : 
+                        `<span style="width:16px;"></span>`
+                    }
+                    <i class="fas fa-folder composer-folder-icon"></i>
+                    <span class="composer-title">${name}</span>
                 </div>
             `;
-        });
 
-        if (filesInFolder.length > 0) {
-            html += `<div style="grid-column: 1 / -1; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-                <h4 style="color:var(--text-muted); font-size:11px; margin-bottom:10px; text-transform:uppercase;">Arquivos nesta pasta:</h4>
-                <div class="asset-list-container" id="folder-files-list"></div>
-            </div>`;
-        }
+            if (isExpanded) {
+                html += `<div class="composer-tree-children">`;
 
-        container.innerHTML = html;
+                // Render Subfolders first
+                subfolders.forEach(subPath => {
+                    html += buildComposerTreeNode(subPath);
+                });
 
-        container.querySelectorAll('.folder-card').forEach(card => {
-            card.addEventListener('click', () => {
-                var fPath = decodeURIComponent(card.getAttribute('data-folder-path'));
-                this.currentFolderNav = fPath;
-                this.applyFiltersAndRender();
+                // Render Direct Audio/Video Files inline under this folder
+                directFiles.forEach((fileAsset) => {
+                    var isSelected = (this.selectedAsset && this.selectedAsset.path === fileAsset.path);
+                    var isFav = window.cacheMgr.isFavorite(fileAsset.path);
+                    var isAudio = fileAsset.type === 'sfx';
+
+                    html += `
+                        <div class="composer-tree-row file-row ${isSelected ? 'selected' : ''}" data-file-path="${encodeURIComponent(fileAsset.path)}">
+                            <span class="composer-fav-btn ${isFav ? 'active' : ''}" data-fav-path="${encodeURIComponent(fileAsset.path)}">
+                                <i class="${isFav ? 'fas' : 'far'} fa-star"></i>
+                            </span>
+                            <span class="composer-file-icon ${isAudio ? '' : 'overlay'}">
+                                <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}"></i>
+                            </span>
+                            <span class="composer-title">${fileAsset.name}</span>
+                            <button class="btn-insert" style="padding: 3px 10px; font-size:10px;" data-insert-path="${encodeURIComponent(fileAsset.path)}">
+                                <i class="fas fa-plus"></i> Inserir
+                            </button>
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+            return html;
+        };
+
+        var htmlTree = userFolders.map(fPath => buildComposerTreeNode(fPath)).join('');
+        container.innerHTML = htmlTree;
+
+        // Bind Folder Chevron/Row Toggles
+        container.querySelectorAll('.composer-tree-row.folder-row').forEach(row => {
+            row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                var dirP = decodeURIComponent(row.getAttribute('data-main-folder'));
+                if (this.expandedMainTreeNodes.has(dirP)) {
+                    this.expandedMainTreeNodes.delete(dirP);
+                } else {
+                    this.expandedMainTreeNodes.add(dirP);
+                }
+                this.renderFolderView(container);
             });
         });
 
-        if (filesInFolder.length > 0) {
-            var filesContainer = document.getElementById('folder-files-list');
-            if (filesContainer) {
-                this.renderAssetList(filesInFolder.slice(0, 50), filesContainer);
-            }
-        }
+        // Bind File Selection & Insert
+        container.querySelectorAll('.composer-tree-row.file-row').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.composer-fav-btn') || e.target.closest('.btn-insert')) return;
+                var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
+                var asset = this.allAssets.find(a => a.path === fPath);
+                if (asset) {
+                    this.selectedAsset = asset;
+                    // Highlight selected row
+                    container.querySelectorAll('.composer-tree-row.file-row').forEach(r => r.classList.remove('selected'));
+                    row.classList.add('selected');
+                    // Play preview & update player bar
+                    this.playAudioPreview(asset, null, null);
+                }
+            });
+        });
+
+        // Bind Insert Button in Tree
+        container.querySelectorAll('.btn-insert[data-insert-path]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                var fPath = decodeURIComponent(btn.getAttribute('data-insert-path'));
+                var asset = this.allAssets.find(a => a.path === fPath);
+                if (asset) {
+                    this.insertToTimeline(asset);
+                }
+            });
+        });
+
+        // Bind Favorite Star in Tree
+        container.querySelectorAll('.composer-fav-btn[data-fav-path]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                var fPath = decodeURIComponent(btn.getAttribute('data-fav-path'));
+                var isFav = window.cacheMgr.toggleFavorite(fPath);
+                btn.innerHTML = `<i class="${isFav ? 'fas' : 'far'} fa-star"></i>`;
+                btn.classList.toggle('active', isFav);
+            });
+        });
     }
 
     renderBreadcrumbs() {
