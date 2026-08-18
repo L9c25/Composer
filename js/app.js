@@ -730,9 +730,6 @@ class ComposerApp {
                                 <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}"></i>
                             </span>
                             <span class="composer-title">${fileAsset.name}</span>
-                            <button class="btn-insert" style="padding: 3px 10px; font-size:10px;" data-insert-path="${encodeURIComponent(fileAsset.path)}">
-                                <i class="fas fa-plus"></i> Inserir
-                            </button>
                         </div>
                     `;
                 });
@@ -761,10 +758,10 @@ class ComposerApp {
             });
         });
 
-        // Bind File Selection & Insert
+        // Bind File Selection (Click) & Double-Click Insert
         container.querySelectorAll('.composer-tree-row.file-row').forEach(row => {
             row.addEventListener('click', (e) => {
-                if (e.target.closest('.composer-fav-btn') || e.target.closest('.btn-insert')) return;
+                if (e.target.closest('.composer-fav-btn')) return;
                 var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
                 var asset = this.allAssets.find(a => a.path === fPath);
                 if (asset) {
@@ -776,13 +773,9 @@ class ComposerApp {
                     this.playAudioPreview(asset, null, null);
                 }
             });
-        });
 
-        // Bind Insert Button in Tree
-        container.querySelectorAll('.btn-insert[data-insert-path]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                var fPath = decodeURIComponent(btn.getAttribute('data-insert-path'));
+            row.addEventListener('dblclick', (e) => {
+                var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
                 var asset = this.allAssets.find(a => a.path === fPath);
                 if (asset) {
                     this.insertToTimeline(asset);

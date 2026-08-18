@@ -54,13 +54,13 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 240px;
+    width: 210px;
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    padding: 16px;
-    gap: 16px;
+    padding: 10px;
+    gap: 10px;
     flex-shrink: 0;
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
     overflow: hidden;
@@ -1360,14 +1360,15 @@ input:checked + .toggle-slider:before {
 .composer-tree-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
-    color: #e5e7eb;
-    font-size: 13px;
+    gap: 6px;
+    padding: 3px 8px;
+    min-height: 25px;
+    color: #d1d5db;
+    font-size: 12px;
     cursor: pointer;
     user-select: none;
     transition: var(--transition);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
 }
 
 .composer-tree-row:hover {
@@ -1376,18 +1377,18 @@ input:checked + .toggle-slider:before {
 }
 
 .composer-tree-row.selected {
-    background: rgba(16, 185, 129, 0.18) !important;
+    background: rgba(16, 185, 129, 0.2) !important;
     border-left: 3px solid var(--accent-green-bright);
     color: #fff;
 }
 
 .composer-chevron {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-dim);
     transition: transform 0.15s ease;
 }
@@ -1398,15 +1399,15 @@ input:checked + .toggle-slider:before {
 
 .composer-folder-icon {
     color: #f59e0b;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .composer-file-icon {
     color: var(--accent-emerald);
-    font-size: 13px;
+    font-size: 11px;
     background: rgba(16, 185, 129, 0.12);
-    padding: 3px 5px;
-    border-radius: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 .composer-file-icon.overlay {
@@ -1416,25 +1417,26 @@ input:checked + .toggle-slider:before {
 
 .composer-title {
     flex: 1;
-    font-weight: 500;
+    font-weight: 400;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .composer-count-badge {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-dim);
     background: rgba(255, 255, 255, 0.05);
-    padding: 2px 6px;
+    padding: 1px 5px;
     border-radius: var(--radius-full);
 }
 
 .composer-tree-children {
     display: flex;
     flex-direction: column;
-    margin-left: 18px;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    margin-left: 14px;
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .composer-fav-btn {
