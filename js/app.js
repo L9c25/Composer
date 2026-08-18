@@ -1024,7 +1024,8 @@ class ComposerApp {
                             btnCutSilence.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
                             try {
                                 var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
-                                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh);
+                                var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+                                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
                                 
                                 asset.path = res.targetPath;
                                 asset.procData = res.procInfo;
@@ -1190,7 +1191,17 @@ class ComposerApp {
 
         var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
 
-        var scriptCall = `ComposerHost.importAndInsertAsset("${asset.path.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak})`;
+        // If Pitch or Reverse is enabled, generate processed audio file for insertion
+        var insertPath = asset.path;
+        if (asset.type === 'sfx' && (this.pitchSemitones !== 0 || this.isReverse)) {
+            try {
+                insertPath = await window.audioEngine.generateProcessedWAV(asset.path, this.pitchSemitones, this.isReverse);
+            } catch (eProc) {
+                console.error("Error generating pitch/reverse WAV:", eProc);
+            }
+        }
+
+        var scriptCall = `ComposerHost.importAndInsertAsset("${insertPath.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak})`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
             try {

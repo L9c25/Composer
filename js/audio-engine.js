@@ -141,10 +141,9 @@ class AudioEngine {
 
     /**
      * CUT SILENCE AND OVERWRITE ORIGINAL FILE ON DISK
-     * Encodes sliced PCM Float32 audio into a 16-bit WAV file buffer
-     * and overwrites `filePath`.
+     * Trim silent boundaries & apply Max Peak Normalization target
      */
-    async cutSilenceAndReplaceFile(filePath, silenceThresholdDb = -45.0) {
+    async cutSilenceAndReplaceFile(filePath, silenceThresholdDb = -45.0, targetMaxPeakDb = -6.0) {
         if (typeof require === 'undefined') {
             throw new Error("Substituição de arquivo no disco requer suporte Node.js.");
         }
@@ -164,16 +163,35 @@ class AudioEngine {
         var endSample = Math.ceil(procInfo.silenceEndSec * sampleRate);
         var trimmedLength = Math.max(0, endSample - startSample);
 
-        if (trimmedLength <= 0 || trimmedLength >= audioBuffer.length - 100) {
-            console.log("[AudioEngine] Nenhum silêncio significativo detectado para cortar.");
-            return { procInfo: procInfo, targetPath: filePath }; // Nothing to trim
-        }
+        var sliceLength = trimmedLength > 0 ? trimmedLength : audioBuffer.length;
+        var sliceStart = trimmedLength > 0 ? startSample : 0;
+        var sliceEnd = trimmedLength > 0 ? endSample : audioBuffer.length;
 
-        // 3. Extract trimmed PCM arrays
+        // 3. Extract trimmed PCM arrays & compute max peak for normalization
         var trimmedChannels = [];
+        var maxAmp = 0;
+
         for (var c = 0; c < numChannels; c++) {
             var fullData = audioBuffer.getChannelData(c);
-            trimmedChannels.push(fullData.subarray(startSample, endSample));
+            var sliced = new Float32Array(fullData.subarray(sliceStart, sliceEnd));
+            for (var i = 0; i < sliced.length; i++) {
+                var absV = Math.abs(sliced[i]);
+                if (absV > maxAmp) maxAmp = absV;
+            }
+            trimmedChannels.push(sliced);
+        }
+
+        // Apply Max Peak Normalization to trimmed samples if targetMaxPeakDb is provided
+        if (targetMaxPeakDb !== null && targetMaxPeakDb !== undefined && maxAmp > 0) {
+            var targetAmp = Math.pow(10, targetMaxPeakDb / 20.0);
+            var gainRatio = targetAmp / maxAmp;
+            for (var c = 0; c < numChannels; c++) {
+                var chArr = trimmedChannels[c];
+                for (var i = 0; i < chArr.length; i++) {
+                    var normV = chArr[i] * gainRatio;
+                    chArr[i] = Math.max(-1.0, Math.min(1.0, normV));
+                }
+            }
         }
 
         // 4. Encode to 16-bit PCM WAV Buffer
@@ -188,7 +206,7 @@ class AudioEngine {
 
         // Write WAV buffer to disk
         fs.writeFileSync(targetPath, wavBuffer);
-        console.log(`[AudioEngine] Arquivo WAV substituído/gerado com sucesso no disco (${targetPath}).`);
+        console.log(`[AudioEngine] Arquivo WAV substituído/gerado com sucesso no disco com Max Peak (${targetPath}).`);
 
         // If converted from MP3 to WAV, remove old MP3 if targetPath is different
         if (targetPath !== filePath && fs.existsSync(filePath)) {
@@ -204,6 +222,74 @@ class AudioEngine {
         window.cacheMgr.setAudioCache(targetPath, stats.mtimeMs, newProcInfo);
 
         return { procInfo: newProcInfo, targetPath: targetPath };
+    }
+
+    /**
+     * Generate temporary WAV file with Pitch Shift and/or Reverse applied for Premiere timeline insertion
+     */
+    async generateProcessedWAV(filePath, pitchSemitones = 0, isReverse = false) {
+        if (typeof require === 'undefined') return filePath;
+        if (pitchSemitones === 0 && !isReverse) return filePath;
+
+        var fs = require('fs');
+        var path = require('path');
+        var os = require('os');
+
+        var audioBuffer = await this.decodeAudioFile(filePath);
+        var numChannels = audioBuffer.numberOfChannels;
+        var origSampleRate = audioBuffer.sampleRate;
+        var totalLen = audioBuffer.length;
+
+        var channelsData = [];
+        for (var c = 0; c < numChannels; c++) {
+            var origData = audioBuffer.getChannelData(c);
+            channelsData.push(new Float32Array(origData));
+        }
+
+        // Reverse samples if requested
+        if (isReverse) {
+            for (var c = 0; c < numChannels; c++) {
+                var arr = new Float32Array(totalLen);
+                for (var i = 0; i < totalLen; i++) {
+                    arr[i] = channelsData[c][totalLen - 1 - i];
+                }
+                channelsData[c] = arr;
+            }
+        }
+
+        // Pitch Shift via Resampling (pitchSemitones: -12 to +12)
+        var outputChannels = channelsData;
+        if (pitchSemitones !== 0) {
+            var pitchRatio = Math.pow(2, pitchSemitones / 12);
+            var newLength = Math.round(totalLen / pitchRatio);
+            var resampledChannels = [];
+
+            for (var c = 0; c < numChannels; c++) {
+                var srcArr = channelsData[c];
+                var dstArr = new Float32Array(newLength);
+                for (var i = 0; i < newLength; i++) {
+                    var srcIdx = i * pitchRatio;
+                    var idx0 = Math.floor(srcIdx);
+                    var idx1 = Math.min(totalLen - 1, idx0 + 1);
+                    var frac = srcIdx - idx0;
+                    var v0 = srcArr[idx0] || 0;
+                    var v1 = srcArr[idx1] || 0;
+                    dstArr[i] = v0 + frac * (v1 - v0);
+                }
+                resampledChannels.push(dstArr);
+            }
+            outputChannels = resampledChannels;
+        }
+
+        var wavBuf = this.encodeWAV(outputChannels, origSampleRate);
+
+        // Save to temporary processed file
+        var tempDir = os.tmpdir();
+        var baseName = path.basename(filePath, path.extname(filePath));
+        var tempWavPath = path.join(tempDir, `composer_proc_${baseName}_p${pitchSemitones}_r${isReverse ? 1 : 0}.wav`);
+
+        fs.writeFileSync(tempWavPath, wavBuf);
+        return tempWavPath;
     }
 
     /**
