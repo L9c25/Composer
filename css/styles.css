@@ -1429,21 +1429,29 @@ input:checked + .toggle-slider:before {
     color: #f59e0b;
 }
 
-/* Responsive Media Queries */
-@media (max-width: 480px) {
-    .top-header {
-        padding: 8px 12px;
-        gap: 8px;
-    }
-    .search-box {
-        max-width: none;
-    }
-    .header-actions {
-        gap: 4px;
-    }
-    .btn-pill {
-        padding: 5px 8px;
-        font-size: 11px;
-    }
+/* Max Peak Control Group in Bottom Player */
+.max-peak-control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
 }
+
+.player-select-peak {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--accent-emerald);
+    font-weight: 600;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+}
+
+.player-select-peak option {
+    background: var(--bg-card);
+    color: var(--text-main);
+}
+
 

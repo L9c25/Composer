@@ -240,6 +240,16 @@ class ComposerApp {
             });
         }
 
+        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
+        if (selectMaxPeakPlayer) {
+            var savedPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+            selectMaxPeakPlayer.value = parseFloat(savedPeak).toFixed(1);
+            selectMaxPeakPlayer.addEventListener('change', (e) => {
+                var val = parseFloat(e.target.value);
+                window.cacheMgr.setSetting('targetMaxPeakDb', val);
+            });
+        }
+
         // Global Audio Play/Pause Button in Player
         var btnPlayMain = document.getElementById('btn-play-main');
         if (btnPlayMain && !btnPlayMain._boundPlay) {
@@ -1235,7 +1245,12 @@ class ComposerApp {
             }
         }
 
-        var scriptCall = `ComposerHost.importAndInsertAsset("${insertPath.replace(/\\/g, '\\\\')}", "${asset.type}", ${targetMaxPeak}, ${nativePeak}, 0, false)`;
+        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
+        if (selectMaxPeakPlayer) {
+            targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
+        }
+
+        var scriptCall = `ComposerHost.importAndInsertAsset(${JSON.stringify(insertPath)}, ${JSON.stringify(asset.type)}, ${targetMaxPeak}, ${nativePeak}, 0, false)`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
             try {

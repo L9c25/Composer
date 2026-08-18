@@ -151,8 +151,31 @@ var ComposerHost = {
                 return JSON.stringify({ success: false, error: "Nenhuma faixa livre disponível na sequência." });
             }
 
-            // Use overwriteClip to place media without cutting/pushing existing clips!
-            targetTrack.overwriteClip(projectItem, cti);
+            // Use overwriteClip / insertClip to place media at CTI position
+            var insertedSuccess = false;
+            try {
+                targetTrack.overwriteClip(projectItem, cti);
+                insertedSuccess = true;
+            } catch (eOver1) {
+                try {
+                    targetTrack.insertClip(projectItem, cti);
+                    insertedSuccess = true;
+                } catch (eIns1) {
+                    try {
+                        targetTrack.overwriteClip(projectItem, cti.seconds);
+                        insertedSuccess = true;
+                    } catch (eOver2) {
+                        try {
+                            targetTrack.insertClip(projectItem, cti.seconds);
+                            insertedSuccess = true;
+                        } catch (eIns2) {}
+                    }
+                }
+            }
+
+            if (!insertedSuccess) {
+                return JSON.stringify({ success: false, error: "Não foi possível posicionar o clipe na timeline do Premiere Pro." });
+            }
 
             // Apply Volume Gain Normalization to inserted track clip item in timeline
             if (mediaType === "sfx" && applyGain) {

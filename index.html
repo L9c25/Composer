@@ -183,7 +183,7 @@
                     </div>
                 </div>
 
-                <!-- Advanced Audio Controls: Pitch & Reverse (Estilo Premiere Composer) -->
+                <!-- Advanced Audio Controls: Pitch, Reverse & Max Peak (Estilo Premiere Composer) -->
                 <div class="player-extra-controls">
                     <div class="pitch-control-group">
                         <span class="ctrl-label">Pitch:</span>
@@ -197,6 +197,18 @@
                             <input type="checkbox" id="chk-reverse">
                             <span>Reverse</span>
                         </label>
+                    </div>
+
+                    <div class="max-peak-control-group">
+                        <span class="ctrl-label">Max Peak:</span>
+                        <select id="select-max-peak-player" class="player-select-peak">
+                            <option value="-6.0" selected>-6.0 dB</option>
+                            <option value="-3.0">-3.0 dB</option>
+                            <option value="-1.0">-1.0 dB</option>
+                            <option value="0.0">0.0 dB</option>
+                            <option value="-9.0">-9.0 dB</option>
+                            <option value="-12.0">-12.0 dB</option>
+                        </select>
                     </div>
                 </div>
             </footer>
