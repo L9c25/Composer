@@ -158,35 +158,63 @@ var ComposerHost = {
                     var pitchRatio = Math.pow(2, pitchVal / 12.0);
                     var finalSpeed = reverseVal ? -1.0 * pitchRatio : pitchRatio;
 
+                    var targetPathNorm = (filePath || "").replace(/\\/g, '/').toLowerCase();
                     var clips = targetTrack.clips;
+
                     for (var c = 0; c < clips.numItems; c++) {
                         var clipItem = clips[c];
-                        if (clipItem.projectItem && clipItem.projectItem.getMediaPath() === filePath) {
+                        var isMatch = false;
+
+                        if (clipItem.projectItem && typeof clipItem.projectItem.getMediaPath === "function") {
+                            var mediaP = (clipItem.projectItem.getMediaPath() || "").replace(/\\/g, '/').toLowerCase();
+                            if (mediaP === targetPathNorm) {
+                                isMatch = true;
+                            }
+                        }
+
+                        if (!isMatch && clipItem.start && Math.abs(clipItem.start.seconds - cti.seconds) < 0.3) {
+                            isMatch = true;
+                        }
+
+                        if (isMatch) {
                             // Apply pitch & reverse speed natively to sequence clip in timeline
                             if (pitchVal !== 0 || reverseVal) {
-                                if (typeof clipItem.setSpeed === "function") {
-                                    clipItem.setSpeed(finalSpeed, 0, false, false);
+                                try {
+                                    if (typeof clipItem.setSpeed === "function") {
+                                        clipItem.setSpeed(finalSpeed, 0, false, false);
+                                    }
+                                } catch (eSpeed1) {
+                                    try {
+                                        if (typeof clipItem.setSpeed === "function") {
+                                            clipItem.setSpeed(finalSpeed);
+                                        }
+                                    } catch (eSpeed2) {}
                                 }
                             }
 
                             // Apply gain offset to clip volume component
                             if (applyGain) {
-                                if (typeof clipItem.setAudioGain === "function") {
-                                    clipItem.setAudioGain(gainOffsetDb);
-                                }
-                                if (clipItem.components) {
-                                    for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
-                                        var comp = clipItem.components[compIdx];
-                                        if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
-                                            if (comp.properties && comp.properties.numItems > 0) {
-                                                var volProp = comp.properties[0];
-                                                if (volProp) {
-                                                    volProp.setValue(gainOffsetDb, true);
+                                try {
+                                    if (typeof clipItem.setAudioGain === "function") {
+                                        clipItem.setAudioGain(gainOffsetDb);
+                                    }
+                                } catch (eAudioGain) {}
+
+                                try {
+                                    if (clipItem.components) {
+                                        for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
+                                            var comp = clipItem.components[compIdx];
+                                            if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
+                                                if (comp.properties && comp.properties.numItems > 0) {
+                                                    var volProp = comp.properties[0];
+                                                    if (volProp) {
+                                                        volProp.setValue(gainOffsetDb, true);
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                }
+                                } catch (eVolComp) {}
                             }
                         }
                     }
