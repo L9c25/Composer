@@ -1,0 +1,15 @@
+# Cache e arquivos temporários da extensão
+composer_cache.json
+*.tmp
+*.log
+
+# Arquivos do Sistema Operacional
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.suo
+*.user

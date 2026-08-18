@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premiere Composer FX Studio</title>
+    <!-- FontAwesome for sleek icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand-header">
+                <div class="brand-logo">FX</div>
+                <div>
+                    <div class="brand-title">Composer FX</div>
+                    <div class="brand-version">Premiere 2025 (25.4)</div>
+                </div>
+            </div>
+
+            <!-- Main Categories -->
+            <div class="nav-section">
+                <div class="nav-section-title">BIBLIOTECA</div>
+                <ul class="nav-menu">
+                    <li class="nav-item active" data-filter="all">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Todos os Efeitos</span>
+                        <span class="nav-badge" id="badge-count-all">0</span>
+                    </li>
+                    <li class="nav-item" data-filter="sfx">
+                        <i class="fas fa-music"></i>
+                        <span>Efeitos Sonoros</span>
+                    </li>
+                    <li class="nav-item" data-filter="overlay">
+                        <i class="fas fa-film"></i>
+                        <span>Overlays de Vídeo</span>
+                    </li>
+                    <li class="nav-item" data-filter="favorites">
+                        <i class="fas fa-star" style="color:#f59e0b;"></i>
+                        <span>Favoritos</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Folders Section -->
+            <div class="folders-container">
+                <div class="nav-section-title">PASTAS LOCAIS</div>
+                <button class="folder-btn-add" id="btn-add-folder">
+                    <i class="fas fa-folder-plus"></i> Adicionar Pasta
+                </button>
+                <div class="folder-list" id="folder-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Persistent Settings (Max Peak & Cut Silence) -->
+            <div class="sidebar-settings">
+                <div class="setting-group">
+                    <div class="setting-label">
+                        <span>MAX PEAK ÁUDIO</span>
+                        <span class="setting-value" id="val-max-peak">dB</span>
+                    </div>
+                    <div class="setting-input-row">
+                        <input type="range" id="slider-max-peak" min="-36.0" max="0.0" step="0.5" value="-6.0">
+                        <input type="number" id="input-max-peak" class="num-input" min="-36.0" max="0.0" step="0.5" value="-6.0">
+                    </div>
+                </div>
+
+                <div class="setting-group" style="border-top:1px solid var(--border-color); padding-top:8px;">
+                    <div class="setting-label">
+                        <span>CORTAR SILÊNCIO</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggle-auto-cut">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-input-row" style="margin-top:4px;">
+                        <span style="font-size:10px; color:var(--text-dim);">Limiar (dB):</span>
+                        <input type="number" id="input-silence-thresh" class="num-input" min="-80" max="-10" step="1" value="-45">
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content View -->
+        <main class="main-content">
+            <!-- Top Search Header -->
+            <header class="top-header">
+                <div class="search-box">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="search-input" class="search-input" placeholder="Buscar efeitos sonoros, overlays ou pastas..." autocomplete="off">
+                </div>
+
+                <div class="header-actions">
+                    <button class="btn-pill active" data-filter="all">TUDO</button>
+                    <button class="btn-pill" data-filter="sfx">ÁUDIOS</button>
+                    <button class="btn-pill" data-filter="overlay">OVERLAYS</button>
+                </div>
+            </header>
+
+            <!-- Asset Grid -->
+            <section class="content-body">
+                <div class="section-header">
+                    <h2 class="section-title">Navegador de Assets</h2>
+                </div>
+
+                <div class="grid-assets" id="grid-assets">
+                    <!-- Populated dynamically -->
+                </div>
+            </section>
+
+            <!-- Player Bar Footer -->
+            <footer class="player-bar">
+                <div class="player-info">
+                    <div class="player-title-box">
+                        <span class="player-title" id="player-title">Nenhum áudio selecionado</span>
+                        <span class="player-subtitle">Clique no play para ouvir o preview</span>
+                    </div>
+                </div>
+
+                <div class="player-controls">
+                    <div class="player-buttons">
+                        <button class="btn-play-main" id="btn-play-main">
+                            <i class="fas fa-play"></i>
+                        </button>
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-notification" style="
+        position: fixed; bottom: 80px; right: 24px;
+        background: linear-gradient(135deg, var(--accent-emerald), #059669);
+        color: #000; font-weight: 700; font-size: 12px;
+        padding: 10px 18px; border-radius: var(--radius-full);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; z-index: 9999;
+    "></div>
+
+    <!-- JavaScript Dependencies -->
+    <script src="js/CSInterface.js"></script>
+    <script src="js/cache-manager.js"></script>
+    <script src="js/audio-engine.js"></script>
+    <script src="js/overlay-engine.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
