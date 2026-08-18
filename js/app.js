@@ -240,13 +240,14 @@ class ComposerApp {
             });
         }
 
-        // Global Audio Stop Button in Player
+        // Global Audio Play/Pause Button in Player
         var btnPlayMain = document.getElementById('btn-play-main');
-        if (btnPlayMain) {
+        if (btnPlayMain && !btnPlayMain._boundPlay) {
+            btnPlayMain._boundPlay = true;
             btnPlayMain.addEventListener('click', () => {
-                if (window.audioEngine.currentSound) {
-                    window.audioEngine.stopAudioPreview();
-                    btnPlayMain.innerHTML = '<i class="fas fa-play"></i>';
+                var targetAsset = this.selectedAsset || (this.allAssets.length > 0 ? this.allAssets[0] : null);
+                if (targetAsset) {
+                    this.playAudioPreview(targetAsset, null, null, 0);
                 }
             });
         }
@@ -1090,7 +1091,8 @@ class ComposerApp {
             }
         });
         var btnInsertMain = document.getElementById('btn-insert-main');
-        if (btnInsertMain) {
+        if (btnInsertMain && !btnInsertMain._boundInsert) {
+            btnInsertMain._boundInsert = true;
             btnInsertMain.addEventListener('click', () => {
                 if (this.selectedAsset) {
                     this.insertToTimeline(this.selectedAsset);
@@ -1098,17 +1100,6 @@ class ComposerApp {
                     this.insertToTimeline(this.allAssets[0]);
                 } else {
                     alert("Nenhum áudio selecionado para inserir.");
-                }
-            });
-        }
-
-        var btnPlayMain = document.getElementById('btn-play-main');
-        if (btnPlayMain) {
-            btnPlayMain.addEventListener('click', () => {
-                if (this.selectedAsset) {
-                    this.playAudioPreview(this.selectedAsset, null, null);
-                } else if (this.allAssets.length > 0) {
-                    this.playAudioPreview(this.allAssets[0], null, null);
                 }
             });
         }
