@@ -162,13 +162,23 @@ var ComposerHost = {
                     insertedSuccess = true;
                 } catch (eIns1) {
                     try {
-                        targetTrack.overwriteClip(projectItem, cti.seconds);
+                        activeSeq.insertClip(projectItem, cti, 0, 0);
                         insertedSuccess = true;
-                    } catch (eOver2) {
+                    } catch (eSeqIns) {
                         try {
-                            targetTrack.insertClip(projectItem, cti.seconds);
+                            activeSeq.overwriteClip(projectItem, cti, 0, 0);
                             insertedSuccess = true;
-                        } catch (eIns2) {}
+                        } catch (eSeqOver) {
+                            try {
+                                targetTrack.overwriteClip(projectItem, cti.seconds);
+                                insertedSuccess = true;
+                            } catch (eOver2) {
+                                try {
+                                    targetTrack.insertClip(projectItem, cti.seconds);
+                                    insertedSuccess = true;
+                                } catch (eIns2) {}
+                            }
+                        }
                     }
                 }
             }
