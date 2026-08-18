@@ -474,10 +474,17 @@ class AudioEngine {
      */
     async playAudioPreview(filePath, pitchSemitones = 0, isReverse = false, onProgress, onEnded, startPercent = 0) {
         this.stopAudioPreview();
+        
+        // Session ID to cancel stale async decoding calls when switching sounds quickly
+        this.currentPlaySessionId = (this.currentPlaySessionId || 0) + 1;
+        var mySessionId = this.currentPlaySessionId;
 
         try {
             var originalBuffer = await this.decodeAudioFile(filePath);
             
+            // Abort if user clicked another sound while this one was decoding
+            if (this.currentPlaySessionId !== mySessionId) return;
+
             // Create playable AudioBuffer
             var audioBuffer = originalBuffer;
             if (isReverse) {
@@ -506,15 +513,17 @@ class AudioEngine {
             gainNode.connect(this.audioCtx.destination);
 
             var playbackDuration = audioBuffer.duration / rate;
-            var offsetSec = Math.max(0, Math.min(playbackDuration, startPercent * playbackDuration));
-            var bufferOffsetSec = offsetSec * rate;
+            var safeStartPct = Math.max(0, Math.min(0.99, startPercent));
+            var offsetSec = safeStartPct * playbackDuration;
+            var bufferOffsetSec = Math.max(0, Math.min(audioBuffer.duration - 0.05, safeStartPct * audioBuffer.duration));
 
             this.currentSound = {
                 source: source,
                 gainNode: gainNode,
                 buffer: audioBuffer,
                 startTime: this.audioCtx.currentTime - offsetSec,
-                duration: playbackDuration
+                duration: playbackDuration,
+                sessionId: mySessionId
             };
             this.currentSoundPath = filePath;
 
@@ -522,14 +531,14 @@ class AudioEngine {
 
             // Progress Loop
             var updateLoop = () => {
-                if (!this.currentSound) return;
+                if (!this.currentSound || this.currentSound.sessionId !== mySessionId) return;
                 var elapsed = this.audioCtx.currentTime - this.currentSound.startTime;
                 var pct = Math.min(1, elapsed / this.currentSound.duration);
                 if (onProgress) onProgress(pct, elapsed, this.currentSound.duration);
 
-                if (pct < 1 && this.currentSound) {
+                if (pct < 1 && this.currentSound && this.currentSound.sessionId === mySessionId) {
                     requestAnimationFrame(updateLoop);
-                } else {
+                } else if (this.currentSound && this.currentSound.sessionId === mySessionId) {
                     this.stopAudioPreview();
                     if (onEnded) onEnded();
                 }
@@ -537,7 +546,9 @@ class AudioEngine {
             requestAnimationFrame(updateLoop);
 
             source.onended = () => {
-                if (onEnded) onEnded();
+                if (this.currentSound && this.currentSound.sessionId === mySessionId) {
+                    if (onEnded) onEnded();
+                }
             };
 
         } catch (err) {
@@ -546,6 +557,7 @@ class AudioEngine {
     }
 
     stopAudioPreview() {
+        this.currentPlaySessionId = (this.currentPlaySessionId || 0) + 1;
         if (this.currentSound && this.currentSound.source) {
             try {
                 this.currentSound.source.stop();

@@ -1118,14 +1118,38 @@ class ComposerApp {
         var mainCanvas = document.getElementById('player-waveform-canvas');
         if (mainCanvas && !mainCanvas._boundSeek) {
             mainCanvas._boundSeek = true;
-            mainCanvas.addEventListener('click', (e) => {
+            
+            var isDraggingSeek = false;
+            var performSeek = (e) => {
                 if (this.selectedAsset && this.selectedAsset.type === 'sfx') {
                     var rect = mainCanvas.getBoundingClientRect();
                     var clickX = e.clientX - rect.left;
-                    var pct = Math.max(0, Math.min(1, clickX / rect.width));
+                    var pct = Math.max(0, Math.min(0.99, clickX / rect.width));
                     this.playAudioPreview(this.selectedAsset, null, null, pct);
                 }
+            };
+
+            mainCanvas.addEventListener('pointerdown', (e) => {
+                isDraggingSeek = true;
+                try { mainCanvas.setPointerCapture(e.pointerId); } catch (errP) {}
+                performSeek(e);
             });
+
+            mainCanvas.addEventListener('pointermove', (e) => {
+                if (isDraggingSeek) {
+                    performSeek(e);
+                }
+            });
+
+            var stopSeek = (e) => {
+                if (isDraggingSeek) {
+                    isDraggingSeek = false;
+                    try { mainCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+                }
+            };
+
+            mainCanvas.addEventListener('pointerup', stopSeek);
+            mainCanvas.addEventListener('pointercancel', stopSeek);
         }
 
         this.renderFoldersList();
