@@ -52,25 +52,9 @@ body {
     overflow: hidden;
 }
 
-/* Sidebar */
+/* Sidebar (Oculta para visualização em tela cheia estilo Premiere Composer) */
 .sidebar {
-    width: 210px;
-    background-color: var(--bg-sidebar);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    gap: 10px;
-    flex-shrink: 0;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
-    overflow: hidden;
-}
-
-.sidebar.collapsed {
-    width: 0;
-    padding: 0;
-    border-right: none;
-    margin-left: -1px;
+    display: none !important;
 }
 
 .btn-sidebar-toggle, .btn-sidebar-expand {

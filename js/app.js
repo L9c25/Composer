@@ -730,10 +730,6 @@ class ComposerApp {
                                 <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}"></i>
                             </span>
                             <span class="composer-title">${fileAsset.name}</span>
-                            <div class="list-col-meta">
-                                <span class="list-dur-badge" id="dur-tree-${encodeURIComponent(fileAsset.path)}">--:--</span>
-                                ${isAudio ? `<span class="list-peak-badge" id="peak-tree-${encodeURIComponent(fileAsset.path)}">-.- dB</span>` : ''}
-                            </div>
                             ${isAudio ? `
                                 <button class="btn-icon btn-cut-silence-tree" data-cut-path="${encodeURIComponent(fileAsset.path)}" title="Cortar Silêncio" style="color:var(--accent-red); width:22px; height:22px; font-size:10px; border:none; background:transparent;">
                                     <i class="fas fa-scissors"></i>
@@ -772,25 +768,6 @@ class ComposerApp {
             var fPath = decodeURIComponent(row.getAttribute('data-file-path'));
             var asset = this.allAssets.find(a => a.path === fPath);
 
-            if (asset && asset.type === 'sfx') {
-                var durTag = row.querySelector('.list-dur-badge');
-                var peakTag = row.querySelector('.list-peak-badge');
-                var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
-                if (cached) {
-                    if (durTag) durTag.textContent = this.formatTime(cached.duration);
-                    if (peakTag) peakTag.textContent = `${cached.nativePeakDb} dB`;
-                    asset.procData = cached;
-                } else {
-                    window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
-                        var proc = window.audioEngine.processAudioBuffer(audioBuf);
-                        window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
-                        if (durTag) durTag.textContent = this.formatTime(proc.duration);
-                        if (peakTag) peakTag.textContent = `${proc.nativePeakDb} dB`;
-                        asset.procData = proc;
-                    }).catch(() => {});
-                }
-            }
-
             row.addEventListener('click', (e) => {
                 if (e.target.closest('.composer-fav-btn') || e.target.closest('.btn-cut-silence-tree')) return;
                 if (asset) {
@@ -798,8 +775,8 @@ class ComposerApp {
                     // Highlight selected row
                     container.querySelectorAll('.composer-tree-row.file-row').forEach(r => r.classList.remove('selected'));
                     row.classList.add('selected');
-                    // Play preview & update player bar
-                    this.playAudioPreview(asset, null, null);
+                    // Autoplay & draw waveform canvas in bottom player bar
+                    this.playAudioPreview(asset, null, null, 0);
                 }
             });
 
@@ -1186,6 +1163,19 @@ class ComposerApp {
             });
         }
 
+        var mainCanvas = document.getElementById('player-waveform-canvas');
+        if (mainCanvas && !mainCanvas._boundSeek) {
+            mainCanvas._boundSeek = true;
+            mainCanvas.addEventListener('click', (e) => {
+                if (this.selectedAsset && this.selectedAsset.type === 'sfx') {
+                    var rect = mainCanvas.getBoundingClientRect();
+                    var clickX = e.clientX - rect.left;
+                    var pct = Math.max(0, Math.min(1, clickX / rect.width));
+                    this.playAudioPreview(this.selectedAsset, null, null, pct);
+                }
+            });
+        }
+
         this.renderFoldersList();
     }
 
@@ -1216,7 +1206,7 @@ class ComposerApp {
         }
     }
 
-    playAudioPreview(asset, canvas, btnPlay) {
+    playAudioPreview(asset, canvas, btnPlay, startPercent = 0) {
         var btnMain = document.getElementById('btn-play-main');
         var playerTitle = document.getElementById('player-title');
         var mainCanvas = document.getElementById('player-waveform-canvas');
@@ -1232,8 +1222,8 @@ class ComposerApp {
 
         this.selectAndDrawPlayerAsset(asset);
 
-        // If clicking on the asset that is CURRENTLY playing, pause/stop it!
-        if (isCurrentlyPlaying) {
+        // If clicking on the asset that is CURRENTLY playing (and not seeking), pause/stop it!
+        if (isCurrentlyPlaying && startPercent === 0) {
             window.audioEngine.stopAudioPreview();
             if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
@@ -1271,7 +1261,7 @@ class ComposerApp {
             if (mainCanvas && asset.procData) {
                 window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
             }
-        });
+        }, startPercent);
     }
 
     async insertToTimeline(asset) {

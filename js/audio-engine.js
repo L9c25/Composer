@@ -414,12 +414,19 @@ class AudioEngine {
                 ctx.fillRect(endX, 0, width - endX, height);
             }
         }
+
+        // Draw Vertical Playhead Indicator Line (White line moving across waveform)
+        if (playbackPercent > 0 && playbackPercent <= 1) {
+            var playheadX = playbackPercent * width;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.floor(playheadX), 0, 2, height);
+        }
     }
 
     /**
-     * Preview Audio Playback in Extension Panel with Pitch & Reverse support
+     * Preview Audio Playback in Extension Panel with Pitch, Reverse & Seek support
      */
-    async playAudioPreview(filePath, pitchSemitones = 0, isReverse = false, onProgress, onEnded) {
+    async playAudioPreview(filePath, pitchSemitones = 0, isReverse = false, onProgress, onEnded, startPercent = 0) {
         this.stopAudioPreview();
 
         try {
@@ -445,28 +452,27 @@ class AudioEngine {
             var source = this.audioCtx.createBufferSource();
             source.buffer = audioBuffer;
 
-            // Apply Pitch Shift (semitones: -12 to +12)
-            if (pitchSemitones !== 0) {
-                var rate = Math.pow(2, pitchSemitones / 12);
-                source.playbackRate.value = rate;
-            }
+            var rate = pitchSemitones !== 0 ? Math.pow(2, pitchSemitones / 12) : 1;
+            source.playbackRate.value = rate;
 
             var gainNode = this.audioCtx.createGain();
             source.connect(gainNode);
             gainNode.connect(this.audioCtx.destination);
 
-            var playbackDuration = audioBuffer.duration / (source.playbackRate.value || 1);
+            var playbackDuration = audioBuffer.duration / rate;
+            var offsetSec = Math.max(0, Math.min(playbackDuration, startPercent * playbackDuration));
+            var bufferOffsetSec = offsetSec * rate;
 
             this.currentSound = {
                 source: source,
                 gainNode: gainNode,
                 buffer: audioBuffer,
-                startTime: this.audioCtx.currentTime,
+                startTime: this.audioCtx.currentTime - offsetSec,
                 duration: playbackDuration
             };
             this.currentSoundPath = filePath;
 
-            source.start(0);
+            source.start(0, bufferOffsetSec);
 
             // Progress Loop
             var updateLoop = () => {
