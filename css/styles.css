@@ -112,6 +112,140 @@ body {
     margin-bottom: 6px;
 }
 
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+    transition: var(--transition);
+}
+
+.collapsible-header:hover {
+    color: var(--accent-emerald);
+}
+
+.toggle-chevron {
+    font-size: 10px;
+    transition: transform 0.2s ease;
+    color: var(--text-dim);
+}
+
+.nav-section.collapsed .toggle-chevron,
+.folders-container.collapsed .toggle-chevron {
+    transform: rotate(-90deg);
+}
+
+.nav-section.collapsed #menu-library,
+.folders-container.collapsed #body-folders {
+    display: none;
+}
+
+/* Sidebar Tree Explorer */
+.sidebar-folder-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.tree-node {
+    display: flex;
+    flex-direction: column;
+}
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 12px;
+}
+
+.tree-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.tree-row.active {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), transparent);
+    color: var(--accent-green-bright);
+    font-weight: 600;
+    border-left: 2px solid var(--accent-emerald);
+}
+
+.tree-expander {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--text-dim);
+    transition: transform 0.15s ease;
+}
+
+.tree-expander:hover {
+    color: #fff;
+}
+
+.tree-expander.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-folder-icon {
+    color: #f59e0b;
+    font-size: 12px;
+}
+
+.tree-folder-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-folder-badge {
+    font-size: 9px;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1px 5px;
+    border-radius: var(--radius-full);
+}
+
+.tree-folder-remove {
+    font-size: 10px;
+    color: var(--text-dim);
+    opacity: 0;
+    transition: opacity 0.15s;
+    padding: 2px;
+}
+
+.tree-row:hover .tree-folder-remove {
+    opacity: 1;
+}
+
+.tree-folder-remove:hover {
+    color: var(--accent-red);
+}
+
+.tree-children {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-left: 14px;
+    padding-left: 6px;
+    border-left: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
 .nav-menu {
     display: flex;
     flex-direction: column;

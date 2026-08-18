@@ -22,9 +22,12 @@
             </div>
 
             <!-- Main Categories -->
-            <div class="nav-section">
-                <div class="nav-section-title">BIBLIOTECA</div>
-                <ul class="nav-menu">
+            <div class="nav-section" id="section-library">
+                <div class="nav-section-title collapsible-header" id="header-library">
+                    <span>BIBLIOTECA</span>
+                    <i class="fas fa-chevron-down toggle-chevron"></i>
+                </div>
+                <ul class="nav-menu" id="menu-library">
                     <li class="nav-item active" data-filter="all">
                         <i class="fas fa-layer-group"></i>
                         <span>Todos os Efeitos</span>
@@ -46,13 +49,18 @@
             </div>
 
             <!-- Folders Section -->
-            <div class="folders-container">
-                <div class="nav-section-title">PASTAS LOCAIS</div>
-                <button class="folder-btn-add" id="btn-add-folder">
-                    <i class="fas fa-folder-plus"></i> Adicionar Pasta
-                </button>
-                <div class="folder-list" id="folder-list">
-                    <!-- Populated dynamically -->
+            <div class="folders-container" id="section-folders">
+                <div class="nav-section-title collapsible-header" id="header-folders">
+                    <span>PASTAS LOCAIS</span>
+                    <i class="fas fa-chevron-down toggle-chevron"></i>
+                </div>
+                <div class="folders-body" id="body-folders">
+                    <button class="folder-btn-add" id="btn-add-folder">
+                        <i class="fas fa-folder-plus"></i> Adicionar Pasta
+                    </button>
+                    <div class="sidebar-folder-tree" id="folder-list">
+                        <!-- Populated dynamically with nested tree nodes -->
+                    </div>
                 </div>
             </div>
 

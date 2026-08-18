@@ -1,7 +1,7 @@
 /**
  * Premiere Composer FX Studio - Main Application Controller
  * High-Performance Async Folder Scanning, Progress Bar, Cache Engine,
- * View Modes (Grid, List, Folder Tree), and Adobe Premiere Pro 2025 Bridge.
+ * View Modes (Grid, List, Folder Tree), Interactive Sidebar Explorer, and Premiere Bridge.
  */
 
 class ComposerApp {
@@ -11,7 +11,9 @@ class ComposerApp {
         this.filteredAssets = [];   // Search & filter results
         this.currentFilter = 'all'; // all, sfx, overlay, favorites
         this.viewMode = 'grid';     // grid, list, folder
-        this.currentFolderNav = null; // null = Root, or string path
+        this.currentFolderNav = null; // null = Root, or string path for main folder view
+        this.selectedSidebarFolder = null; // Selected folder path in sidebar tree
+        this.expandedSidebarNodes = new Set(); // Set of expanded folder paths in sidebar
         this.searchQuery = '';
         this.isScanning = false;
         
@@ -21,6 +23,7 @@ class ComposerApp {
 
         this.initUI();
         this.bindEvents();
+        this.bindSidebarCollapsibles();
         this.loadInitialFolders();
     }
 
@@ -42,6 +45,24 @@ class ComposerApp {
         if (inputThresh) inputThresh.value = silenceThresh;
 
         this.renderFoldersList();
+    }
+
+    bindSidebarCollapsibles() {
+        var headerLib = document.getElementById('header-library');
+        var sectionLib = document.getElementById('section-library');
+        if (headerLib && sectionLib) {
+            headerLib.addEventListener('click', () => {
+                sectionLib.classList.toggle('collapsed');
+            });
+        }
+
+        var headerFolders = document.getElementById('header-folders');
+        var sectionFolders = document.getElementById('section-folders');
+        if (headerFolders && sectionFolders) {
+            headerFolders.addEventListener('click', () => {
+                sectionFolders.classList.toggle('collapsed');
+            });
+        }
     }
 
     bindEvents() {
@@ -66,6 +87,8 @@ class ComposerApp {
                 var target = e.currentTarget;
                 target.classList.add('active');
                 this.currentFilter = target.getAttribute('data-filter');
+                this.selectedSidebarFolder = null; // Clear sidebar folder selection to view category across all folders
+                this.renderFoldersList();
                 this.applyFiltersAndRender();
             });
         });
@@ -144,7 +167,7 @@ class ComposerApp {
                 if (contentBody.scrollTop + contentBody.clientHeight >= contentBody.scrollHeight - 300) {
                     if (this.renderedCount < this.filteredAssets.length) {
                         this.renderedCount += this.pageSize;
-                        this.renderCurrentView(true); // append mode
+                        this.renderCurrentView(true);
                     }
                 }
             });
@@ -189,34 +212,119 @@ class ComposerApp {
 
     removeFolder(folderPath) {
         window.cacheMgr.removeFolder(folderPath);
+        if (this.selectedSidebarFolder === folderPath) {
+            this.selectedSidebarFolder = null;
+        }
         this.renderFoldersList();
         this.rescanAllFolders();
     }
 
+    /**
+     * Render Hierarchical Interactive Folder Tree in Sidebar
+     */
     renderFoldersList() {
         var container = document.getElementById('folder-list');
         if (!container) return;
 
-        var folders = window.cacheMgr.getFolders();
-        if (folders.length === 0) {
+        var rootFolders = window.cacheMgr.getFolders();
+        if (rootFolders.length === 0) {
             container.innerHTML = `<div style="font-size:11px; color:var(--text-dim); padding:6px;">Nenhuma pasta adicionada.</div>`;
             return;
         }
 
-        container.innerHTML = folders.map(f => {
-            var folderName = typeof require !== 'undefined' ? require('path').basename(f) : f.split(/[\/\\]/).pop();
-            return `
-                <div class="folder-item" title="${f}">
-                    <span><i class="far fa-folder" style="color:var(--accent-emerald); margin-right:6px;"></i>${folderName}</span>
-                    <i class="fas fa-times folder-remove" data-folder="${encodeURIComponent(f)}"></i>
+        var pathLib = typeof require !== 'undefined' ? require('path') : null;
+
+        var buildFolderTreeNode = (dirPath, level = 0) => {
+            var name = pathLib ? pathLib.basename(dirPath) : dirPath.split(/[\/\\]/).pop();
+            var totalCount = this.allAssets.filter(a => a.path.startsWith(dirPath)).length;
+
+            // Find direct child subfolders of dirPath
+            var subfolderPaths = new Set();
+            this.allAssets.forEach(asset => {
+                if (asset.path.startsWith(dirPath) && asset.path !== dirPath) {
+                    var rel = asset.path.substring(dirPath.length).replace(/^[\/\\]/, '');
+                    var parts = rel.split(/[\/\\]/);
+                    if (parts.length > 1) {
+                        var childSub = pathLib ? pathLib.join(dirPath, parts[0]) : dirPath + '/' + parts[0];
+                        subfolderPaths.add(childSub);
+                    }
+                }
+            });
+
+            var subfolders = Array.from(subfolderPaths).sort();
+            var hasChildren = subfolders.length > 0;
+            var isExpanded = this.expandedSidebarNodes.has(dirPath);
+            var isActive = (this.selectedSidebarFolder === dirPath);
+
+            var html = `<div class="tree-node">`;
+            html += `
+                <div class="tree-row ${isActive ? 'active' : ''}" data-tree-path="${encodeURIComponent(dirPath)}">
+                    ${hasChildren ? 
+                        `<span class="tree-expander ${isExpanded ? 'expanded' : ''}" data-expand-path="${encodeURIComponent(dirPath)}">
+                            <i class="fas fa-chevron-right"></i>
+                        </span>` : 
+                        `<span style="width:14px; display:inline-block;"></span>`
+                    }
+                    <i class="fas fa-folder tree-folder-icon"></i>
+                    <span class="tree-folder-name" title="${dirPath}">${name}</span>
+                    <span class="tree-folder-badge">${totalCount.toLocaleString()}</span>
+                    ${level === 0 ? `<i class="fas fa-times tree-folder-remove" title="Remover Pasta" data-remove-folder="${encodeURIComponent(dirPath)}"></i>` : ''}
                 </div>
             `;
-        }).join('');
 
-        container.querySelectorAll('.folder-remove').forEach(btn => {
+            if (hasChildren && isExpanded) {
+                html += `<div class="tree-children">`;
+                subfolders.forEach(subPath => {
+                    html += buildFolderTreeNode(subPath, level + 1);
+                });
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+            return html;
+        };
+
+        var htmlTree = rootFolders.map(fPath => buildFolderTreeNode(fPath, 0)).join('');
+        container.innerHTML = htmlTree;
+
+        // Bind Expander clicks
+        container.querySelectorAll('.tree-expander').forEach(exp => {
+            exp.addEventListener('click', (e) => {
+                e.stopPropagation();
+                var p = decodeURIComponent(exp.getAttribute('data-expand-path'));
+                if (this.expandedSidebarNodes.has(p)) {
+                    this.expandedSidebarNodes.delete(p);
+                } else {
+                    this.expandedSidebarNodes.add(p);
+                }
+                this.renderFoldersList();
+            });
+        });
+
+        // Bind Folder Selection clicks
+        container.querySelectorAll('.tree-row').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.classList.contains('tree-expander') || e.target.closest('.tree-expander') || e.target.classList.contains('tree-folder-remove')) {
+                    return;
+                }
+                var p = decodeURIComponent(row.getAttribute('data-tree-path'));
+                
+                if (this.selectedSidebarFolder === p) {
+                    this.selectedSidebarFolder = null; // Unselect -> show all
+                } else {
+                    this.selectedSidebarFolder = p;
+                }
+
+                this.renderFoldersList();
+                this.applyFiltersAndRender();
+            });
+        });
+
+        // Bind Remove Folder click
+        container.querySelectorAll('.tree-folder-remove').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                var fPath = decodeURIComponent(e.target.getAttribute('data-folder'));
+                var fPath = decodeURIComponent(btn.getAttribute('data-remove-folder'));
                 this.removeFolder(fPath);
             });
         });
@@ -231,6 +339,7 @@ class ComposerApp {
             this.allAssets = cachedAssets;
             var badgeAll = document.getElementById('badge-count-all');
             if (badgeAll) badgeAll.textContent = this.allAssets.length;
+            this.renderFoldersList();
             this.applyFiltersAndRender();
         }
 
@@ -310,7 +419,6 @@ class ComposerApp {
                 console.warn("[Scanner] Error reading directory:", currentDir, errDir);
             }
 
-            // Yield control back to UI thread every 15 directories to keep interface silky smooth
             yieldCounter++;
             if (yieldCounter % 15 === 0) {
                 if (countBadge) countBadge.textContent = `${foundAssets.length.toLocaleString()} arquivos`;
@@ -328,6 +436,9 @@ class ComposerApp {
 
         var badgeAll = document.getElementById('badge-count-all');
         if (badgeAll) badgeAll.textContent = this.allAssets.length;
+
+        // Refresh sidebar tree to populate subfolder structure and item counts
+        this.renderFoldersList();
 
         // Completion UI state
         if (barFill) barFill.style.width = '100%';
@@ -355,6 +466,11 @@ class ComposerApp {
             if (filter === 'overlay' && asset.type !== 'overlay') return false;
             if (filter === 'favorites' && !window.cacheMgr.isFavorite(asset.path)) return false;
 
+            // Sidebar Folder Filter (Subfolder Tree Selection)
+            if (this.selectedSidebarFolder) {
+                if (!asset.path.startsWith(this.selectedSidebarFolder)) return false;
+            }
+
             // Query search
             if (query) {
                 var matchName = asset.name.toLowerCase().includes(query);
@@ -362,8 +478,8 @@ class ComposerApp {
                 if (!matchName && !matchPath) return false;
             }
 
-            // Subfolder Navigation Filter (for Folder View or Folder Nav)
-            if (this.currentFolderNav && !query) {
+            // Subfolder Navigation Filter (for Folder View in main content)
+            if (this.currentFolderNav && !query && !this.selectedSidebarFolder) {
                 var pathLib = typeof require !== 'undefined' ? require('path') : null;
                 if (pathLib) {
                     if (!asset.path.startsWith(this.currentFolderNav)) return false;
@@ -405,7 +521,13 @@ class ComposerApp {
         } else {
             if (breadcrumbBox) breadcrumbBox.style.display = 'none';
             if (sectionTitle) {
-                sectionTitle.textContent = this.viewMode === 'list' ? "Lista de Assets" : "Navegador de Assets";
+                if (this.selectedSidebarFolder) {
+                    var pathLib = typeof require !== 'undefined' ? require('path') : null;
+                    var folderName = pathLib ? pathLib.basename(this.selectedSidebarFolder) : this.selectedSidebarFolder.split(/[\/\\]/).pop();
+                    sectionTitle.textContent = `Pasta: ${folderName}`;
+                } else {
+                    sectionTitle.textContent = this.viewMode === 'list' ? "Lista de Assets" : "Navegador de Assets";
+                }
             }
         }
 
@@ -433,7 +555,7 @@ class ComposerApp {
     }
 
     /**
-     * Render Folder Tree & Subdirectories View (Estilo Premiere Composer)
+     * Render Folder Tree & Subdirectories View in Main Content Area
      */
     renderFolderView(container) {
         container.className = 'folder-tree-grid';
@@ -454,24 +576,21 @@ class ComposerApp {
         var subfoldersMap = new Map();
         var filesInFolder = [];
 
-        var targetDir = this.currentFolderNav;
+        var targetDir = this.currentFolderNav || this.selectedSidebarFolder;
 
         if (!targetDir) {
-            // Root View: Show Root User Folders
             userFolders.forEach(fPath => {
                 var name = pathLib ? pathLib.basename(fPath) : fPath.split(/[\/\\]/).pop();
                 var count = this.allAssets.filter(a => a.path.startsWith(fPath)).length;
                 subfoldersMap.set(fPath, { name: name, fullPath: fPath, count: count });
             });
         } else {
-            // Subfolder View: Find direct children folders & files inside targetDir
             this.allAssets.forEach(asset => {
                 if (asset.path.startsWith(targetDir) && asset.path !== targetDir) {
                     var rel = asset.path.substring(targetDir.length).replace(/^[\/\\]/, '');
                     var parts = rel.split(/[\/\\]/);
 
                     if (parts.length > 1) {
-                        // It's in a child subfolder
                         var subName = parts[0];
                         var subFullPath = pathLib ? pathLib.join(targetDir, subName) : targetDir + '/' + subName;
                         if (!subfoldersMap.has(subFullPath)) {
@@ -479,7 +598,6 @@ class ComposerApp {
                         }
                         subfoldersMap.get(subFullPath).count++;
                     } else {
-                        // Direct file in this folder
                         filesInFolder.push(asset);
                     }
                 }
@@ -488,7 +606,6 @@ class ComposerApp {
 
         var html = '';
 
-        // Render Folder Cards
         subfoldersMap.forEach((info) => {
             html += `
                 <div class="folder-card" data-folder-path="${encodeURIComponent(info.fullPath)}">
@@ -501,7 +618,6 @@ class ComposerApp {
             `;
         });
 
-        // If direct files exist, render them below as list
         if (filesInFolder.length > 0) {
             html += `<div style="grid-column: 1 / -1; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
                 <h4 style="color:var(--text-muted); font-size:11px; margin-bottom:10px; text-transform:uppercase;">Arquivos nesta pasta:</h4>
@@ -511,7 +627,6 @@ class ComposerApp {
 
         container.innerHTML = html;
 
-        // Bind folder navigation clicks
         container.querySelectorAll('.folder-card').forEach(card => {
             card.addEventListener('click', () => {
                 var fPath = decodeURIComponent(card.getAttribute('data-folder-path'));
@@ -520,7 +635,6 @@ class ComposerApp {
             });
         });
 
-        // Render nested files inside current folder
         if (filesInFolder.length > 0) {
             var filesContainer = document.getElementById('folder-files-list');
             if (filesContainer) {
@@ -534,14 +648,15 @@ class ComposerApp {
         if (!box) return;
 
         var pathLib = typeof require !== 'undefined' ? require('path') : null;
-        var html = `<span class="breadcrumb-item ${!this.currentFolderNav ? 'active' : ''}" id="bc-root"><i class="fas fa-home"></i> Raiz</span>`;
+        var activePath = this.currentFolderNav || this.selectedSidebarFolder;
+        var html = `<span class="breadcrumb-item ${!activePath ? 'active' : ''}" id="bc-root"><i class="fas fa-home"></i> Raiz</span>`;
 
-        if (this.currentFolderNav) {
-            var parts = this.currentFolderNav.split(/[\/\\]/).filter(Boolean);
+        if (activePath) {
+            var parts = activePath.split(/[\/\\]/).filter(Boolean);
             var accumPath = "";
 
             parts.forEach((part, idx) => {
-                if (idx === 0 && this.currentFolderNav.includes(':')) {
+                if (idx === 0 && activePath.includes(':')) {
                     accumPath = part + '\\';
                 } else {
                     accumPath = pathLib ? pathLib.join(accumPath, part) : accumPath + '/' + part;
@@ -559,6 +674,8 @@ class ComposerApp {
         if (bcRoot) {
             bcRoot.addEventListener('click', () => {
                 this.currentFolderNav = null;
+                this.selectedSidebarFolder = null;
+                this.renderFoldersList();
                 this.applyFiltersAndRender();
             });
         }
@@ -567,6 +684,8 @@ class ComposerApp {
             item.addEventListener('click', () => {
                 var targetPath = decodeURIComponent(item.getAttribute('data-bc-path'));
                 this.currentFolderNav = targetPath;
+                this.selectedSidebarFolder = targetPath;
+                this.renderFoldersList();
                 this.applyFiltersAndRender();
             });
         });
@@ -722,7 +841,6 @@ class ComposerApp {
                     if (canvas) window.audioEngine.drawWaveform(canvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
                     asset.procData = cached;
                 } else {
-                    // Lazy Audio Buffer Decode for active viewport
                     window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
                         var proc = window.audioEngine.processAudioBuffer(audioBuf);
                         window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
