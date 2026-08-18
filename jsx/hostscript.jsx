@@ -15,13 +15,18 @@ var ComposerHost = {
      * Find project item by file path
      */
     findProjectItemByPath: function(parentItem, filePath) {
+        if (!filePath) return null;
+        var targetNorm = filePath.replace(/\\/g, '/').toLowerCase();
         for (var i = 0; i < parentItem.children.numItems; i++) {
             var item = parentItem.children[i];
             if (item.type === ProjectItemType.BIN) {
                 var found = this.findProjectItemByPath(item, filePath);
                 if (found) return found;
-            } else if (item.getMediaPath() === filePath) {
-                return item;
+            } else if (typeof item.getMediaPath === "function" && item.getMediaPath()) {
+                var mediaNorm = item.getMediaPath().replace(/\\/g, '/').toLowerCase();
+                if (mediaNorm === targetNorm) {
+                    return item;
+                }
             }
         }
         return null;
