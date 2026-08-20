@@ -12,6 +12,17 @@ var ComposerHost = {
     },
 
     /**
+     * Open native folder picker dialog
+     */
+    selectFolderDialog: function() {
+        var folder = Folder.selectDialog("Selecione uma pasta de áudio/vídeo para o Premiere Composer");
+        if (folder) {
+            return folder.fsName;
+        }
+        return "";
+    },
+
+    /**
      * Find project item by file path
      */
     findProjectItemByPath: function(parentItem, filePath) {

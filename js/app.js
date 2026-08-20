@@ -170,16 +170,15 @@ class ComposerApp {
             });
         }
 
-        // Navigation Category Tabs (All, SFX, Overlays, Favorites)
-        var tabBtns = document.querySelectorAll('.nav-item[data-filter]');
-        tabBtns.forEach(btn => {
+        // Navigation Category Tabs & Top Filter Pills (All, SFX, Overlays, Favorites)
+        var filterBtns = document.querySelectorAll('.btn-pill[data-filter], .nav-item[data-filter]');
+        filterBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                tabBtns.forEach(b => b.classList.remove('active'));
+                filterBtns.forEach(b => b.classList.remove('active'));
                 var target = e.currentTarget;
                 target.classList.add('active');
                 this.currentFilter = target.getAttribute('data-filter');
-                this.selectedSidebarFolder = null; // Clear sidebar folder selection to view category across all folders
-                this.renderFoldersList();
+                this.selectedSidebarFolder = null; // Clear folder selection to view category across all folders
                 this.applyFiltersAndRender();
             });
         });
@@ -294,28 +293,67 @@ class ComposerApp {
      * Folder Selection via File Dialog / Node fs
      */
     promptAddFolder() {
-        if (typeof require !== 'undefined') {
-            try {
-                var input = document.createElement('input');
-                input.type = 'file';
-                input.webkitdirectory = true;
-                input.onchange = (e) => {
-                    if (e.target.files.length > 0) {
-                        var folderPath = e.target.files[0].path;
-                        if (folderPath) {
-                            var parentFolder = require('path').dirname(folderPath);
-                            this.addFolderAndScan(parentFolder || folderPath);
-                        }
-                    }
-                };
-                input.click();
-                return;
-            } catch (err) {}
+        if (this.csInterface) {
+            this.csInterface.evalScript("ComposerHost.selectFolderDialog()", (folderPath) => {
+                if (folderPath && folderPath.length > 1 && folderPath !== "undefined" && folderPath !== "null") {
+                    this.addFolderAndScan(folderPath);
+                } else {
+                    this.fallbackAddFolderInput();
+                }
+            });
+        } else {
+            this.fallbackAddFolderInput();
         }
-        
+    }
+
+    fallbackAddFolderInput() {
+        var picker = document.getElementById('input-folder-picker');
+        if (picker) {
+            picker.onchange = (e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                    var fileObj = e.target.files[0];
+                    var folderPath = fileObj.path;
+                    if (folderPath) {
+                        var pathLib = typeof require !== 'undefined' ? require('path') : null;
+                        var dirP = pathLib ? pathLib.dirname(folderPath) : folderPath.substring(0, folderPath.lastIndexOf('/'));
+                        this.addFolderAndScan(dirP || folderPath);
+                    }
+                }
+            };
+            picker.click();
+            return;
+        }
+
         var folder = prompt("Digite o caminho completo da pasta de efeitos (ex: C:\\Audios\\SFX):");
         if (folder && folder.trim()) {
             this.addFolderAndScan(folder.trim());
+        }
+    }
+
+    promptRemoveFolder() {
+        var userFolders = window.cacheMgr.getFolders();
+        if (userFolders.length === 0) {
+            alert("Nenhuma pasta adicionada para remover.");
+            return;
+        }
+
+        if (userFolders.length === 1) {
+            var fName = userFolders[0].split(/[\/\\]/).pop();
+            if (confirm(`Deseja remover a pasta "${fName}" (${userFolders[0]}) do Premiere Composer?`)) {
+                this.removeFolder(userFolders[0]);
+            }
+            return;
+        }
+
+        var folderListStr = userFolders.map((f, i) => `${i + 1}. ${f.split(/[\/\\]/).pop()} (${f})`).join('\n');
+        var choice = prompt(`Digite o número da pasta que deseja remover:\n\n${folderListStr}`);
+        if (choice) {
+            var idx = parseInt(choice, 10) - 1;
+            if (!isNaN(idx) && idx >= 0 && idx < userFolders.length) {
+                this.removeFolder(userFolders[idx]);
+            } else {
+                alert("Número de pasta inválido.");
+            }
         }
     }
 
@@ -644,9 +682,21 @@ class ComposerApp {
             this.expandedMainTreeNodes = new Set(userFolders);
         }
 
+        if (this.currentFilter === 'favorites' && this.filteredAssets.length === 0) {
+            container.innerHTML = `
+                <div style="padding: 40px 20px; text-align: center; color: var(--text-dim);">
+                    <i class="far fa-star" style="font-size: 36px; color: #f59e0b; margin-bottom: 14px; display: block;"></i>
+                    <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 6px;">Nenhum favorito adicionado</div>
+                    <div style="font-size: 11px;">Clique na estrela ⭐ ao lado de qualquer áudio ou overlay para salvar nos seus favoritos!</div>
+                </div>
+            `;
+            return;
+        }
+
         var buildComposerTreeNode = (dirPath) => {
             var name = pathLib ? pathLib.basename(dirPath) : dirPath.split(/[\/\\]/).pop();
             var isExpanded = this.expandedMainTreeNodes.has(dirPath);
+            var isRootUserFolder = userFolders.includes(dirPath);
 
             // Find direct child subfolders & files of dirPath
             var subfolderPaths = new Set();
@@ -679,6 +729,11 @@ class ComposerApp {
                     }
                     <i class="fas fa-folder composer-folder-icon"></i>
                     <span class="composer-title">${name}</span>
+                    ${isRootUserFolder ? `
+                        <button class="btn-remove-root-folder" data-remove-folder="${encodeURIComponent(dirPath)}" title="Excluir/Remover esta pasta do Composer">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : ''}
                 </div>
             `;
 
@@ -721,8 +776,51 @@ class ComposerApp {
             return html;
         };
 
-        var htmlTree = userFolders.map(fPath => buildComposerTreeNode(fPath)).join('');
+        var htmlTree = `<div class="composer-tree-view">` + userFolders.map(fPath => buildComposerTreeNode(fPath)).join('');
+        
+        // Add Bottom Folder Management Bar
+        htmlTree += `
+            <div class="composer-tree-actions-bar">
+                <button class="btn-tree-action" id="btn-tree-add-folder" title="Adicionar Nova Pasta de Áudio/Vídeo">
+                    <i class="fas fa-folder-plus"></i> + Adicionar Pasta
+                </button>
+                ${userFolders.length > 0 ? `
+                    <button class="btn-tree-action danger" id="btn-tree-remove-folder" title="Excluir/Remover Pasta Monitorada">
+                        <i class="fas fa-trash-alt"></i> Excluir Pasta
+                    </button>
+                ` : ''}
+            </div>
+        </div>`;
+
         container.innerHTML = htmlTree;
+
+        // Bind Add Folder in Tree
+        var btnAddFolderTree = container.querySelector('#btn-tree-add-folder');
+        if (btnAddFolderTree) {
+            btnAddFolderTree.addEventListener('click', () => {
+                this.promptAddFolder();
+            });
+        }
+
+        // Bind Remove Folder in Tree
+        var btnRemoveFolderTree = container.querySelector('#btn-tree-remove-folder');
+        if (btnRemoveFolderTree) {
+            btnRemoveFolderTree.addEventListener('click', () => {
+                this.promptRemoveFolder();
+            });
+        }
+
+        // Bind Root Folder Trash Icons
+        container.querySelectorAll('.btn-remove-root-folder').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                var fPath = decodeURIComponent(btn.getAttribute('data-remove-folder'));
+                var fName = fPath.split(/[\/\\]/).pop();
+                if (confirm(`Deseja remover a pasta "${fName}" do Premiere Composer?`)) {
+                    this.removeFolder(fPath);
+                }
+            });
+        });
 
         // Bind Folder Chevron/Row Toggles
         container.querySelectorAll('.composer-tree-row.folder-row').forEach(row => {

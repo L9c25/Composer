@@ -1454,4 +1454,67 @@ input:checked + .toggle-slider:before {
     color: var(--text-main);
 }
 
+/* Folder Management Actions Bar */
+.composer-tree-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(18, 22, 28, 0.95);
+    border-top: 1px solid var(--border-color);
+    margin-top: 8px;
+}
+
+.btn-tree-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--accent-emerald);
+    font-weight: 600;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-tree-action:hover {
+    background: var(--accent-emerald);
+    color: #000;
+    border-color: var(--accent-emerald);
+    box-shadow: 0 0 10px var(--accent-emerald-glow);
+}
+
+.btn-tree-action.danger {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--accent-red);
+}
+
+.btn-tree-action.danger:hover {
+    background: var(--accent-red);
+    color: #fff;
+    border-color: var(--accent-red);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.btn-remove-root-folder {
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 2px 5px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    opacity: 0.5;
+}
+
+.btn-remove-root-folder:hover {
+    color: var(--accent-red);
+    opacity: 1;
+}
+
 
