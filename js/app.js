@@ -905,7 +905,18 @@ class ComposerApp {
             </div>
         </div>`;
 
+        var savedScroll = container.scrollTop;
+        var contentBody = document.querySelector('.content-body');
+        var savedBodyScroll = contentBody ? contentBody.scrollTop : 0;
+
         container.innerHTML = htmlTree;
+
+        if (savedScroll > 0) container.scrollTop = savedScroll;
+        if (contentBody && savedBodyScroll > 0) contentBody.scrollTop = savedBodyScroll;
+        requestAnimationFrame(() => {
+            if (savedScroll > 0) container.scrollTop = savedScroll;
+            if (contentBody && savedBodyScroll > 0) contentBody.scrollTop = savedBodyScroll;
+        });
 
         // Bind Add Folder in Tree
         var btnAddFolderTree = container.querySelector('#btn-tree-add-folder');
@@ -970,7 +981,7 @@ class ComposerApp {
             });
         });
 
-        // Bind Cut Silence in Tree View (Direct In-Place Overwrite)
+        // Bind Cut Silence in Tree View (Direct In-Place Overwrite without jumping scroll!)
         container.querySelectorAll('.btn-cut-silence-tree').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -996,11 +1007,21 @@ class ComposerApp {
 
                         window.cacheMgr.setScannedIndex(this.allAssets);
 
+                        // Update DOM elements in place without resetting scroll!
+                        var row = btn.closest('.file-row');
+                        if (row) {
+                            row.setAttribute('data-file-path', encodeURIComponent(res.targetPath));
+                            var titleEl = row.querySelector('.composer-title');
+                            if (titleEl) titleEl.textContent = asset.name;
+                            var favBtn = row.querySelector('.composer-fav-btn');
+                            if (favBtn) favBtn.setAttribute('data-fav-path', encodeURIComponent(res.targetPath));
+                        }
+                        btn.setAttribute('data-cut-path', encodeURIComponent(res.targetPath));
+
                         btn.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
                         setTimeout(() => { btn.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
                         
                         this.selectAndDrawPlayerAsset(asset);
-                        this.renderFolderView(container);
                         this.showNotification(`✨ Arquivo "${asset.name}" sobrescrito e salvo com sucesso no disco!`);
                     } catch (errCut) {
                         alert("Erro ao cortar silêncio: " + errCut.message);
