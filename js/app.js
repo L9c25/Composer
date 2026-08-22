@@ -25,6 +25,7 @@ class ComposerApp {
         this.isReverse = false;
 
         this.initUI();
+        this.setupPlayerScrubber();
         this.bindEvents();
         this.bindSidebarCollapsibles();
         this.loadInitialFolders();
@@ -58,14 +59,13 @@ class ComposerApp {
         var valPitch = document.getElementById('val-pitch');
         var btnResetPitch = document.getElementById('btn-reset-pitch');
         var chkReverse = document.getElementById('chk-reverse');
-        var btnPlayMain = document.getElementById('btn-play-main');
 
         if (sliderPitch && valPitch) {
             sliderPitch.addEventListener('input', (e) => {
                 this.pitchSemitones = parseInt(e.target.value, 10) || 0;
                 valPitch.textContent = this.pitchSemitones > 0 ? `+${this.pitchSemitones}` : `${this.pitchSemitones}`;
-                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
-                    this.playAudioPreview(this.selectedAsset, null, null);
+                if (this.selectedAsset && window.audioEngine.state === 'playing') {
+                    this.playAudioPreview(this.selectedAsset, null, null, window.audioEngine.getPlaybackInfo().percent);
                 }
             });
         }
@@ -75,8 +75,8 @@ class ComposerApp {
                 this.pitchSemitones = 0;
                 if (sliderPitch) sliderPitch.value = 0;
                 if (valPitch) valPitch.textContent = "0";
-                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
-                    this.playAudioPreview(this.selectedAsset, null, null);
+                if (this.selectedAsset && window.audioEngine.state === 'playing') {
+                    this.playAudioPreview(this.selectedAsset, null, null, window.audioEngine.getPlaybackInfo().percent);
                 }
             });
         }
@@ -84,23 +84,132 @@ class ComposerApp {
         if (chkReverse) {
             chkReverse.addEventListener('change', (e) => {
                 this.isReverse = e.target.checked;
-                if (this.selectedAsset && window.audioEngine.currentSoundPath === this.selectedAsset.path) {
-                    this.playAudioPreview(this.selectedAsset, null, null);
+                if (this.selectedAsset && window.audioEngine.state === 'playing') {
+                    this.playAudioPreview(this.selectedAsset, null, null, 0);
                 }
             });
         }
 
-        if (btnPlayMain) {
-            btnPlayMain.addEventListener('click', () => {
-                if (this.selectedAsset) {
-                    this.playAudioPreview(this.selectedAsset, null, null);
-                } else if (this.allAssets.length > 0) {
-                    this.playAudioPreview(this.allAssets[0], null, null);
+        // Spacebar Keyboard Listener for instant Play/Pause
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                var activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+                if (activeTag !== 'input' && activeTag !== 'textarea') {
+                    e.preventDefault();
+                    this.togglePlayPause();
                 }
-            });
-        }
+            }
+        });
 
         this.renderFoldersList();
+    }
+
+    /**
+     * Interactive Scrubber & Needle Control for Waveform Box
+     */
+    setupPlayerScrubber() {
+        var mainCanvas = document.getElementById('player-waveform-canvas');
+        var box = document.getElementById('player-waveform-box');
+        var tooltip = document.getElementById('waveform-hover-tooltip');
+        var timeCurrent = document.getElementById('player-time-current');
+        if (!mainCanvas || !box) return;
+
+        var isDragging = false;
+
+        var getPercentFromEvent = (e) => {
+            var rect = mainCanvas.getBoundingClientRect();
+            var clientX = e.clientX;
+            if (clientX === undefined && e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+            }
+            var x = clientX - rect.left;
+            return Math.max(0, Math.min(0.999, x / rect.width));
+        };
+
+        var updateHoverTooltip = (pct, clientX) => {
+            if (!this.selectedAsset || this.selectedAsset.type !== 'sfx') {
+                if (tooltip) tooltip.classList.remove('visible');
+                return;
+            }
+            var dur = (this.selectedAsset.procData && this.selectedAsset.procData.duration) || 1;
+            var hoverSec = pct * dur;
+            if (tooltip) {
+                tooltip.textContent = this.formatTimePrecise(hoverSec);
+                var rect = box.getBoundingClientRect();
+                var relX = clientX - rect.left;
+                tooltip.style.left = `${Math.max(25, Math.min(rect.width - 25, relX))}px`;
+                tooltip.classList.add('visible');
+            }
+        };
+
+        var handleSeek = (pct) => {
+            if (!this.selectedAsset) {
+                if (this.allAssets.length > 0) {
+                    this.selectedAsset = this.allAssets[0];
+                } else {
+                    return;
+                }
+            }
+            if (this.selectedAsset.type !== 'sfx') return;
+
+            var dur = (this.selectedAsset.procData && this.selectedAsset.procData.duration) || 1;
+            var curSec = pct * dur;
+            if (timeCurrent) timeCurrent.textContent = this.formatTimePrecise(curSec);
+
+            if (window.audioEngine.state === 'stopped') {
+                this.playAudioPreview(this.selectedAsset, null, null, pct);
+            } else {
+                window.audioEngine.seekAudioPreview(pct);
+                if (this.selectedAsset.procData) {
+                    window.audioEngine.drawWaveform(mainCanvas, this.selectedAsset.procData.waveform, pct, this.selectedAsset.procData.silenceStartSec, this.selectedAsset.procData.silenceEndSec, dur);
+                }
+            }
+        };
+
+        mainCanvas.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            try { mainCanvas.setPointerCapture(e.pointerId); } catch (errP) {}
+            var pct = getPercentFromEvent(e);
+            handleSeek(pct);
+            updateHoverTooltip(pct, e.clientX);
+        });
+
+        mainCanvas.addEventListener('pointermove', (e) => {
+            var pct = getPercentFromEvent(e);
+            if (isDragging) {
+                handleSeek(pct);
+            } else {
+                var dur = (this.selectedAsset && this.selectedAsset.procData && this.selectedAsset.procData.duration) || 1;
+                var currentPct = window.audioEngine.getPlaybackInfo().percent;
+                if (this.selectedAsset && this.selectedAsset.procData) {
+                    window.audioEngine.drawWaveform(mainCanvas, this.selectedAsset.procData.waveform, currentPct, this.selectedAsset.procData.silenceStartSec, this.selectedAsset.procData.silenceEndSec, dur, pct);
+                }
+            }
+            updateHoverTooltip(pct, e.clientX);
+        });
+
+        var endDrag = (e) => {
+            if (isDragging) {
+                isDragging = false;
+                try { mainCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
+                var pct = getPercentFromEvent(e);
+                handleSeek(pct);
+            }
+        };
+
+        mainCanvas.addEventListener('pointerup', endDrag);
+        mainCanvas.addEventListener('pointercancel', endDrag);
+
+        box.addEventListener('pointerleave', () => {
+            if (!isDragging) {
+                if (tooltip) tooltip.classList.remove('visible');
+                if (this.selectedAsset && this.selectedAsset.procData) {
+                    var dur = this.selectedAsset.procData.duration || 1;
+                    var currentPct = window.audioEngine.getPlaybackInfo().percent;
+                    window.audioEngine.drawWaveform(mainCanvas, this.selectedAsset.procData.waveform, currentPct, this.selectedAsset.procData.silenceStartSec, this.selectedAsset.procData.silenceEndSec, dur, -1);
+                }
+            }
+        });
     }
 
     bindSidebarCollapsibles() {
@@ -178,19 +287,7 @@ class ComposerApp {
                 var target = e.currentTarget;
                 target.classList.add('active');
                 this.currentFilter = target.getAttribute('data-filter');
-                this.selectedSidebarFolder = null; // Clear folder selection to view category across all folders
-                this.applyFiltersAndRender();
-            });
-        });
-
-        // View Mode Switcher (Grid, List, Folder)
-        var viewBtns = document.querySelectorAll('.btn-view-mode[data-view]');
-        viewBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                viewBtns.forEach(b => b.classList.remove('active'));
-                var target = e.currentTarget;
-                target.classList.add('active');
-                this.viewMode = target.getAttribute('data-view');
+                this.selectedSidebarFolder = null;
                 this.applyFiltersAndRender();
             });
         });
@@ -249,15 +346,13 @@ class ComposerApp {
             });
         }
 
-        // Global Audio Play/Pause Button in Player
+        // Single Global Audio Play/Pause Button in Player
         var btnPlayMain = document.getElementById('btn-play-main');
         if (btnPlayMain && !btnPlayMain._boundPlay) {
             btnPlayMain._boundPlay = true;
-            btnPlayMain.addEventListener('click', () => {
-                var targetAsset = this.selectedAsset || (this.allAssets.length > 0 ? this.allAssets[0] : null);
-                if (targetAsset) {
-                    this.playAudioPreview(targetAsset, null, null, 0);
-                }
+            btnPlayMain.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.togglePlayPause();
             });
         }
 
@@ -286,6 +381,32 @@ class ComposerApp {
                     }
                 }
             });
+        }
+    }
+
+    /**
+     * Clean Toggle Play/Pause/Resume
+     */
+    togglePlayPause() {
+        var btnMain = document.getElementById('btn-play-main');
+        var targetAsset = this.selectedAsset || (this.filteredAssets.length > 0 ? this.filteredAssets[0] : (this.allAssets.length > 0 ? this.allAssets[0] : null));
+        if (!targetAsset || targetAsset.type !== 'sfx') return;
+
+        var state = window.audioEngine.state;
+        if (state === 'playing') {
+            window.audioEngine.pauseAudioPreview();
+            if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
+            document.querySelectorAll('.btn-play').forEach(b => b.innerHTML = `<i class="fas fa-play"></i>`);
+        } else if (state === 'paused') {
+            var resumed = window.audioEngine.resumeAudioPreview();
+            if (resumed) {
+                if (btnMain) btnMain.innerHTML = `<i class="fas fa-pause"></i>`;
+            } else {
+                this.playAudioPreview(targetAsset, null, null, 0);
+            }
+        } else {
+            // stopped
+            this.playAudioPreview(targetAsset, null, null, 0);
         }
     }
 
@@ -506,7 +627,7 @@ class ComposerApp {
     }
 
     /**
-     * Non-Blocking Async Folder Scanner with Progress Bar for +10GB / Thousands of Audios
+     * Non-Blocking Async Folder Scanner with Progress Bar
      */
     async rescanAllFolders() {
         if (typeof require === 'undefined') return;
@@ -591,7 +712,7 @@ class ComposerApp {
         var badgeAll = document.getElementById('badge-count-all');
         if (badgeAll) badgeAll.textContent = this.allAssets.length;
 
-        // Refresh sidebar tree to populate subfolder structure and item counts
+        // Refresh sidebar tree
         this.renderFoldersList();
 
         // Completion UI state
@@ -620,7 +741,7 @@ class ComposerApp {
             if (filter === 'overlay' && asset.type !== 'overlay') return false;
             if (filter === 'favorites' && !window.cacheMgr.isFavorite(asset.path)) return false;
 
-            // Sidebar Folder Filter (Subfolder Tree Selection)
+            // Sidebar Folder Filter
             if (this.selectedSidebarFolder) {
                 if (!asset.path.startsWith(this.selectedSidebarFolder)) return false;
             }
@@ -632,14 +753,6 @@ class ComposerApp {
                 if (!matchName && !matchPath) return false;
             }
 
-            // Subfolder Navigation Filter (for Folder View in main content)
-            if (this.currentFolderNav && !query && !this.selectedSidebarFolder) {
-                var pathLib = typeof require !== 'undefined' ? require('path') : null;
-                if (pathLib) {
-                    if (!asset.path.startsWith(this.currentFolderNav)) return false;
-                }
-            }
-
             return true;
         });
 
@@ -648,7 +761,7 @@ class ComposerApp {
     }
 
     /**
-     * Main View Dispatcher (Grid, List, Folder Tree)
+     * Main View Dispatcher
      */
     renderCurrentView() {
         var container = document.getElementById('grid-assets');
@@ -668,10 +781,10 @@ class ComposerApp {
 
         if (userFolders.length === 0) {
             container.innerHTML = `
-                <div class="empty-state" style="padding:40px;">
-                    <i class="fas fa-folder-plus empty-icon"></i>
-                    <h3>Nenhuma pasta local vinculada</h3>
-                    <p>Clique em "+ Adicionar Pasta" na barra lateral para começar.</p>
+                <div class="empty-state" style="padding:40px; text-align:center;">
+                    <i class="fas fa-folder-plus" style="font-size:36px; color:#f59e0b; margin-bottom:12px; display:block;"></i>
+                    <h3 style="color:#fff; font-size:15px; margin-bottom:6px;">Nenhuma pasta local vinculada</h3>
+                    <p style="color:var(--text-dim); font-size:12px;">Clique em "+ Adicionar Pasta" para indexar seus efeitos sonoros e overlays.</p>
                 </div>
             `;
             return;
@@ -761,7 +874,7 @@ class ComposerApp {
                             </span>
                             <span class="composer-title">${fileAsset.name}</span>
                             ${isAudio ? `
-                                <button class="btn-icon btn-cut-silence-tree" data-cut-path="${encodeURIComponent(fileAsset.path)}" title="Cortar Silêncio" style="color:var(--accent-red); width:22px; height:22px; font-size:10px; border:none; background:transparent;">
+                                <button class="btn-icon btn-cut-silence-tree" data-cut-path="${encodeURIComponent(fileAsset.path)}" title="Cortar Silêncio & Sobrescrever Arquivo Original" style="color:var(--accent-red); width:22px; height:22px; font-size:10px; border:none; background:transparent;">
                                     <i class="fas fa-scissors"></i>
                                 </button>
                             ` : ''}
@@ -797,17 +910,13 @@ class ComposerApp {
         // Bind Add Folder in Tree
         var btnAddFolderTree = container.querySelector('#btn-tree-add-folder');
         if (btnAddFolderTree) {
-            btnAddFolderTree.addEventListener('click', () => {
-                this.promptAddFolder();
-            });
+            btnAddFolderTree.addEventListener('click', () => this.promptAddFolder());
         }
 
         // Bind Remove Folder in Tree
         var btnRemoveFolderTree = container.querySelector('#btn-tree-remove-folder');
         if (btnRemoveFolderTree) {
-            btnRemoveFolderTree.addEventListener('click', () => {
-                this.promptRemoveFolder();
-            });
+            btnRemoveFolderTree.addEventListener('click', () => this.promptRemoveFolder());
         }
 
         // Bind Root Folder Trash Icons
@@ -845,11 +954,12 @@ class ComposerApp {
                 if (e.target.closest('.composer-fav-btn') || e.target.closest('.btn-cut-silence-tree')) return;
                 if (asset) {
                     this.selectedAsset = asset;
-                    // Highlight selected row
                     container.querySelectorAll('.composer-tree-row.file-row').forEach(r => r.classList.remove('selected'));
                     row.classList.add('selected');
-                    // Autoplay & draw waveform canvas in bottom player bar
-                    this.playAudioPreview(asset, null, null, 0);
+                    this.selectAndDrawPlayerAsset(asset);
+                    if (asset.type === 'sfx') {
+                        this.playAudioPreview(asset, null, null, 0);
+                    }
                 }
             });
 
@@ -860,24 +970,38 @@ class ComposerApp {
             });
         });
 
-        // Bind Cut Silence in Tree View
+        // Bind Cut Silence in Tree View (Direct In-Place Overwrite)
         container.querySelectorAll('.btn-cut-silence-tree').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 var fPath = decodeURIComponent(btn.getAttribute('data-cut-path'));
                 var asset = this.allAssets.find(a => a.path === fPath);
-                if (asset && confirm(`Deseja cortar o silêncio do arquivo "${asset.name}" e salvar em formato WAV limpo?`)) {
+                if (asset && confirm(`Deseja cortar o silêncio e ajustar o Max Peak do arquivo "${asset.name}" SOBRESCREVENDO o arquivo original no disco?`)) {
                     btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
                     try {
                         var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
                         var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+                        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
+                        if (selectMaxPeakPlayer) targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
+
+                        window.audioEngine.stopAudioPreview();
                         var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
+                        
                         asset.path = res.targetPath;
                         asset.procData = res.procInfo;
                         asset.mtime = Date.now();
+                        if (typeof require !== 'undefined') {
+                            asset.name = require('path').basename(res.targetPath);
+                        }
+
+                        window.cacheMgr.setScannedIndex(this.allAssets);
+
                         btn.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
                         setTimeout(() => { btn.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
+                        
+                        this.selectAndDrawPlayerAsset(asset);
                         this.renderFolderView(container);
+                        this.showNotification(`✨ Arquivo "${asset.name}" sobrescrito e salvo com sucesso no disco!`);
                     } catch (errCut) {
                         alert("Erro ao cortar silêncio: " + errCut.message);
                         btn.innerHTML = `<i class="fas fa-scissors"></i>`;
@@ -899,446 +1023,179 @@ class ComposerApp {
         });
     }
 
-    renderBreadcrumbs() {
-        var box = document.getElementById('breadcrumb-container');
-        if (!box) return;
-
-        var pathLib = typeof require !== 'undefined' ? require('path') : null;
-        var activePath = this.currentFolderNav || this.selectedSidebarFolder;
-        var html = `<span class="breadcrumb-item ${!activePath ? 'active' : ''}" id="bc-root"><i class="fas fa-home"></i> Raiz</span>`;
-
-        if (activePath) {
-            var parts = activePath.split(/[\/\\]/).filter(Boolean);
-            var accumPath = "";
-
-            parts.forEach((part, idx) => {
-                if (idx === 0 && activePath.includes(':')) {
-                    accumPath = part + '\\';
-                } else {
-                    accumPath = pathLib ? pathLib.join(accumPath, part) : accumPath + '/' + part;
-                }
-
-                var isLast = (idx === parts.length - 1);
-                html += ` <span class="breadcrumb-sep"><i class="fas fa-chevron-right"></i></span> `;
-                html += `<span class="breadcrumb-item ${isLast ? 'active' : ''}" data-bc-path="${encodeURIComponent(accumPath)}">${part}</span>`;
-            });
-        }
-
-        box.innerHTML = html;
-
-        var bcRoot = document.getElementById('bc-root');
-        if (bcRoot) {
-            bcRoot.addEventListener('click', () => {
-                this.currentFolderNav = null;
-                this.selectedSidebarFolder = null;
-                this.renderFoldersList();
-                this.applyFiltersAndRender();
-            });
-        }
-
-        box.querySelectorAll('.breadcrumb-item[data-bc-path]').forEach(item => {
-            item.addEventListener('click', () => {
-                var targetPath = decodeURIComponent(item.getAttribute('data-bc-path'));
-                this.currentFolderNav = targetPath;
-                this.selectedSidebarFolder = targetPath;
-                this.renderFoldersList();
-                this.applyFiltersAndRender();
-            });
-        });
-    }
-
     /**
-     * Render Compact List View (Estilo Premiere Composer)
-     * Inclui exibição de pastas e subpastas no topo da lista
+     * Select Asset and Draw Waveform in Bottom Player
      */
-    renderAssetList(assets, container) {
-        var pathLib = typeof require !== 'undefined' ? require('path') : null;
-        var activeFolder = this.selectedSidebarFolder || this.currentFolderNav;
-        var subfolderPaths = new Set();
-
-        if (activeFolder) {
-            this.allAssets.forEach(a => {
-                if (a.path.startsWith(activeFolder) && a.path !== activeFolder) {
-                    var rel = a.path.substring(activeFolder.length).replace(/^[\/\\]/, '');
-                    var parts = rel.split(/[\/\\]/);
-                    if (parts.length > 1) {
-                        var childSub = pathLib ? pathLib.join(activeFolder, parts[0]) : activeFolder + '/' + parts[0];
-                        subfolderPaths.add(childSub);
-                    }
-                }
-            });
-        } else {
-            // Render root user folders if no specific sidebar folder is selected
-            var rootFolders = window.cacheMgr.getFolders();
-            rootFolders.forEach(fP => subfolderPaths.add(fP));
-        }
-
-        var subfolders = Array.from(subfolderPaths).sort();
-        var html = "";
-
-        // Render Subfolders at top of List View if present
-        subfolders.forEach(subP => {
-            var fName = pathLib ? pathLib.basename(subP) : subP.split(/[\/\\]/).pop();
-            var count = this.allAssets.filter(a => a.path.startsWith(subP)).length;
-
-            html += `
-                <div class="asset-list-row folder-list-row" data-subfolder-path="${encodeURIComponent(subP)}" style="cursor:pointer; background:rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b;">
-                    <span style="width:14px;"></span>
-                    <div class="list-col-type">
-                        <i class="fas fa-folder" style="color:#f59e0b;"></i>
-                    </div>
-                    <div class="list-col-info">
-                        <span class="list-asset-name" style="font-weight:600; color:#fff;">${fName}</span>
-                    </div>
-                    <div class="list-col-meta">
-                        <span class="composer-count-badge" style="color:#f59e0b; background:rgba(245, 158, 11, 0.12);">${count} itens</span>
-                    </div>
-                </div>
-            `;
-        });
-
-        // Render Files
-        html += assets.map((asset, idx) => {
-            var isFav = window.cacheMgr.isFavorite(asset.path);
-            var isAudio = asset.type === 'sfx';
-
-            return `
-                <div class="asset-list-row" data-index="${idx}" data-path="${encodeURIComponent(asset.path)}">
-                    <span class="composer-fav-btn btn-fav ${isFav ? 'active' : ''}" data-fav-path="${encodeURIComponent(asset.path)}">
-                        <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
-                    </span>
-
-                    <div class="list-col-type">
-                        <i class="${isAudio ? 'fas fa-wave-square' : 'fas fa-film'}" style="color:${isAudio ? 'var(--accent-emerald)' : 'var(--accent-cyan)'}"></i>
-                    </div>
-
-                    <div class="list-col-info">
-                        <span class="list-asset-name" title="${asset.name}">${asset.name}</span>
-                    </div>
-
-                    <div class="list-col-meta">
-                        <span class="list-dur-badge" id="dur-list-${idx}">--:--</span>
-                        ${isAudio ? `<span class="list-peak-badge" id="peak-list-${idx}">-.- dB</span>` : ''}
-                    </div>
-
-                    <div class="list-col-actions">
-                        ${isAudio ? `
-                            <button class="btn-icon btn-cut-silence" title="Cortar Silêncio e Substituir Arquivo" style="color:var(--accent-red); width:24px; height:24px; font-size:11px; border:none; background:transparent;">
-                                <i class="fas fa-scissors"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        container.innerHTML = html;
-
-        // Bind Subfolder click navigation
-        container.querySelectorAll('.folder-list-row[data-subfolder-path]').forEach(row => {
-            row.addEventListener('click', () => {
-                var subP = decodeURIComponent(row.getAttribute('data-subfolder-path'));
-                this.selectedSidebarFolder = subP;
-                this.currentFolderNav = subP;
-                this.renderFoldersList();
-                this.applyFiltersAndRender();
-            });
-        });
-
-        this.bindAssetInteractions(assets, container, true);
-    }
-
-    /**
-     * Render Asset Grid Cards View (Current Visual Mode)
-     */
-    renderAssetGrid(assets, container) {
-        container.innerHTML = assets.map((asset, idx) => {
-            var isFav = window.cacheMgr.isFavorite(asset.path);
-            var isAudio = asset.type === 'sfx';
-
-            return `
-                <div class="asset-card" data-index="${idx}" data-path="${encodeURIComponent(asset.path)}">
-                    <div class="card-top">
-                        <span class="card-title" title="${asset.name}">${asset.name}</span>
-                        <span class="card-badge ${isAudio ? 'badge-sfx' : 'badge-overlay'}">${isAudio ? 'SFX' : 'OVERLAY'}</span>
-                    </div>
-
-                    <div class="card-preview-box">
-                        ${isAudio ? 
-                            `<canvas class="waveform-canvas" id="canvas-${idx}"></canvas>` : 
-                            `<div class="overlay-preview-container" id="overlay-box-${idx}">
-                                <img class="overlay-thumbnail" id="thumb-${idx}" src="" alt="preview" />
-                                <video class="overlay-hover-video" style="display:none;" loop muted></video>
-                            </div>`
-                        }
-                    </div>
-
-                    <div class="card-bottom">
-                        <div class="card-info-specs">
-                            <span class="dur-tag" id="dur-${idx}">--:--</span>
-                            ${isAudio ? `<span class="peak-tag" id="peak-${idx}">-.- dB</span>` : ''}
-                        </div>
-
-                        <div class="card-actions">
-                            <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" title="Favorito">
-                                <i class="${isFav ? 'fas' : 'far'} fa-star" style="${isFav ? 'color:#f59e0b' : ''}"></i>
-                            </button>
-                            
-                            ${isAudio ? `
-                                <button class="btn-icon btn-cut-silence" title="Cortar Silêncio e Substituir Arquivo" style="color:var(--accent-red);">
-                                    <i class="fas fa-scissors"></i>
-                                </button>
-                                <button class="btn-icon btn-play" title="Ouvir Preview">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                            ` : ''}
-
-                            <button class="btn-insert" title="Inserir na Timeline do Premiere">
-                                <i class="fas fa-plus"></i> Inserir
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        this.bindAssetInteractions(assets, container, false);
-    }
-
-    /**
-     * Event & Waveform Handler Binding for Grid & List Elements
-     */
-    bindAssetInteractions(assets, container, isList = false) {
-        assets.forEach((asset, idx) => {
-            var itemEl = container.children[idx];
-            if (!itemEl) return;
-
-            var btnFav = itemEl.querySelector('.btn-fav');
-            if (btnFav) {
-                btnFav.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    var isNowFav = window.cacheMgr.toggleFavorite(asset.path);
-                    btnFav.innerHTML = `<i class="${isNowFav ? 'fas' : 'far'} fa-star" style="${isNowFav ? 'color:#f59e0b' : ''}"></i>`;
-                });
-            }
-
-            var btnInsert = itemEl.querySelector('.btn-insert');
-            if (btnInsert) {
-                btnInsert.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.insertToTimeline(asset);
-                });
-            }
-
-            if (asset.type === 'sfx') {
-                var durTag = itemEl.querySelector(isList ? `#dur-list-${idx}` : `#dur-${idx}`);
-                var peakTag = itemEl.querySelector(isList ? `#peak-list-${idx}` : `#peak-${idx}`);
-                var btnPlay = itemEl.querySelector('.btn-play');
-                var btnCutSilence = itemEl.querySelector('.btn-cut-silence');
-                var canvas = isList ? null : itemEl.querySelector(`#canvas-${idx}`);
-
-                var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
-                if (cached) {
-                    if (durTag) durTag.textContent = this.formatTime(cached.duration);
-                    if (peakTag) peakTag.textContent = `${cached.nativePeakDb} dB`;
-                    if (canvas) window.audioEngine.drawWaveform(canvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
-                    asset.procData = cached;
-                } else {
-                    window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
-                        var proc = window.audioEngine.processAudioBuffer(audioBuf);
-                        window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
-                        if (durTag) durTag.textContent = this.formatTime(proc.duration);
-                        if (peakTag) peakTag.textContent = `${proc.nativePeakDb} dB`;
-                        if (canvas) window.audioEngine.drawWaveform(canvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
-                        asset.procData = proc;
-                    }).catch(() => {});
-                }
-
-                if (btnPlay) {
-                    btnPlay.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.playAudioPreview(asset, canvas, btnPlay);
-                    });
-                }
-
-                if (btnCutSilence) {
-                    btnCutSilence.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        if (confirm(`Deseja cortar o silêncio do arquivo "${asset.name}" e salvar em formato WAV limpo?`)) {
-                            btnCutSilence.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
-                            try {
-                                var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
-                                var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
-                                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
-                                
-                                asset.path = res.targetPath;
-                                asset.procData = res.procInfo;
-                                asset.mtime = Date.now();
-                                if (typeof require !== 'undefined') {
-                                    asset.name = require('path').basename(res.targetPath);
-                                }
-
-                                if (durTag) durTag.textContent = this.formatTime(res.procInfo.duration);
-                                if (peakTag) peakTag.textContent = `${res.procInfo.nativePeakDb} dB`;
-                                if (canvas) window.audioEngine.drawWaveform(canvas, res.procInfo.waveform, 0, res.procInfo.silenceStartSec, res.procInfo.silenceEndSec, res.procInfo.duration);
-                                
-                                btnCutSilence.innerHTML = `<i class="fas fa-check" style="color:var(--accent-green-bright);"></i>`;
-                                setTimeout(() => { btnCutSilence.innerHTML = `<i class="fas fa-scissors"></i>`; }, 2000);
-                            } catch (errCut) {
-                                alert("Erro ao cortar silêncio: " + errCut.message);
-                                btnCutSilence.innerHTML = `<i class="fas fa-scissors"></i>`;
-                            }
-                        }
-                    });
-                }
-            } else if (!isList) {
-                var thumbImg = itemEl.querySelector(`#thumb-${idx}`);
-                var durTagVideo = itemEl.querySelector(`#dur-${idx}`);
-                
-                var cachedOverlay = window.cacheMgr.getOverlayCache(asset.path, asset.mtime);
-                if (cachedOverlay) {
-                    if (thumbImg) thumbImg.src = cachedOverlay.thumbnailDataUrl;
-                    if (durTagVideo) durTagVideo.textContent = this.formatTime(cachedOverlay.duration);
-                } else {
-                    window.overlayEngine.generateLowResThumbnail(asset.path).then(info => {
-                        if (info) {
-                            window.cacheMgr.setOverlayCache(asset.path, asset.mtime, info);
-                            if (thumbImg) thumbImg.src = info.thumbnailDataUrl;
-                            if (durTagVideo) durTagVideo.textContent = this.formatTime(info.duration);
-                        }
-                    });
-                }
-
-                window.overlayEngine.setupHoverScrub(itemEl, asset.path);
-            }
-        });
-
-        var mainCanvas = document.getElementById('player-waveform-canvas');
-        if (mainCanvas && !mainCanvas._boundSeek) {
-            mainCanvas._boundSeek = true;
-            
-            var isDraggingSeek = false;
-            var performSeek = (e) => {
-                if (this.selectedAsset && this.selectedAsset.type === 'sfx') {
-                    var rect = mainCanvas.getBoundingClientRect();
-                    var clickX = e.clientX - rect.left;
-                    var pct = Math.max(0, Math.min(0.99, clickX / rect.width));
-                    this.playAudioPreview(this.selectedAsset, null, null, pct);
-                }
-            };
-
-            mainCanvas.addEventListener('pointerdown', (e) => {
-                isDraggingSeek = true;
-                try { mainCanvas.setPointerCapture(e.pointerId); } catch (errP) {}
-                performSeek(e);
-            });
-
-            mainCanvas.addEventListener('pointermove', (e) => {
-                if (isDraggingSeek) {
-                    performSeek(e);
-                }
-            });
-
-            var stopSeek = (e) => {
-                if (isDraggingSeek) {
-                    isDraggingSeek = false;
-                    try { mainCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
-                }
-            };
-
-            mainCanvas.addEventListener('pointerup', stopSeek);
-            mainCanvas.addEventListener('pointercancel', stopSeek);
-        }
-
-        this.renderFoldersList();
-    }
-
     selectAndDrawPlayerAsset(asset) {
         this.selectedAsset = asset;
         var playerTitle = document.getElementById('player-title');
+        var playerSubtitle = document.getElementById('player-subtitle');
         var mainCanvas = document.getElementById('player-waveform-canvas');
+        var timeCurrent = document.getElementById('player-time-current');
+        var timeTotal = document.getElementById('player-time-total');
 
         if (playerTitle) playerTitle.textContent = asset.name;
+        if (timeCurrent) timeCurrent.textContent = "00:00.00";
 
-        if (mainCanvas && asset.type === 'sfx') {
+        if (asset.type === 'sfx') {
+            var draw = (proc) => {
+                if (playerSubtitle) playerSubtitle.textContent = `Max Peak: ${proc.nativePeakDb} dB | Duração: ${this.formatTimePrecise(proc.duration)}`;
+                if (timeTotal) timeTotal.textContent = this.formatTimePrecise(proc.duration);
+                if (mainCanvas) {
+                    window.audioEngine.drawWaveform(mainCanvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
+                }
+            };
+
             if (asset.procData) {
-                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+                draw(asset.procData);
             } else {
                 var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
                 if (cached) {
                     asset.procData = cached;
-                    window.audioEngine.drawWaveform(mainCanvas, cached.waveform, 0, cached.silenceStartSec, cached.silenceEndSec, cached.duration);
+                    draw(cached);
                 } else {
                     window.audioEngine.decodeAudioFile(asset.path).then(audioBuf => {
                         var proc = window.audioEngine.processAudioBuffer(audioBuf);
                         window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
                         asset.procData = proc;
-                        window.audioEngine.drawWaveform(mainCanvas, proc.waveform, 0, proc.silenceStartSec, proc.silenceEndSec, proc.duration);
+                        draw(proc);
                     }).catch(() => {});
                 }
             }
+        } else {
+            if (playerSubtitle) playerSubtitle.textContent = "Overlay de Vídeo";
+            if (timeTotal) timeTotal.textContent = "--:--";
         }
     }
 
+    /**
+     * Play Audio Preview with Real-Time Needle Updates
+     */
     playAudioPreview(asset, canvas, btnPlay, startPercent = 0) {
+        if (!asset || asset.type !== 'sfx') return;
+        this.selectedAsset = asset;
+
         var btnMain = document.getElementById('btn-play-main');
         var playerTitle = document.getElementById('player-title');
+        var playerSubtitle = document.getElementById('player-subtitle');
         var mainCanvas = document.getElementById('player-waveform-canvas');
-
-        var isCurrentlyPlaying = false;
-        if (window.audioEngine.currentSound && window.audioEngine.currentSoundPath && asset && asset.path) {
-            var path1 = window.audioEngine.currentSoundPath.replace(/\\/g, '/').toLowerCase();
-            var path2 = asset.path.replace(/\\/g, '/').toLowerCase();
-            if (path1 === path2) {
-                isCurrentlyPlaying = true;
-            }
-        }
-
-        this.selectAndDrawPlayerAsset(asset);
-
-        // If clicking on the asset that is CURRENTLY playing (and not seeking), pause/stop it!
-        if (isCurrentlyPlaying && startPercent === 0) {
-            window.audioEngine.stopAudioPreview();
-            if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
-            if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
-            if (canvas && asset.procData) {
-                window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
-            }
-            if (mainCanvas && asset.procData) {
-                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
-            }
-            return;
-        }
-
-        // Reset previous buttons if another sound was playing
-        document.querySelectorAll('.btn-play').forEach(btn => {
-            btn.innerHTML = `<i class="fas fa-play"></i>`;
-        });
+        var timeCurrent = document.getElementById('player-time-current');
+        var timeTotal = document.getElementById('player-time-total');
 
         if (playerTitle) playerTitle.textContent = asset.name;
+        if (playerSubtitle && asset.procData) playerSubtitle.textContent = `Max Peak: ${asset.procData.nativePeakDb} dB | Duração: ${this.formatTimePrecise(asset.procData.duration)}`;
         if (btnMain) btnMain.innerHTML = `<i class="fas fa-pause"></i>`;
         if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-pause"></i>`;
 
-        window.audioEngine.playAudioPreview(asset.path, this.pitchSemitones, this.isReverse, (pct, elapsed, duration) => {
-            if (canvas && asset.procData) {
-                window.audioEngine.drawWaveform(canvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
+        // Reset other play buttons
+        document.querySelectorAll('.btn-play').forEach(b => {
+            if (b !== btnPlay) b.innerHTML = `<i class="fas fa-play"></i>`;
+        });
+
+        var onProgress = (pct, currentSec, duration) => {
+            if (timeCurrent) timeCurrent.textContent = this.formatTimePrecise(currentSec);
+            if (timeTotal) timeTotal.textContent = this.formatTimePrecise(duration);
+
+            if (asset.procData) {
+                if (canvas) {
+                    window.audioEngine.drawWaveform(canvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
+                }
+                if (mainCanvas) {
+                    window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
+                }
             }
-            if (mainCanvas && asset.procData) {
-                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, pct, asset.procData.silenceStartSec, asset.procData.silenceEndSec, duration);
-            }
-        }, () => {
-            if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
+        };
+
+        var onEnded = () => {
             if (btnMain) btnMain.innerHTML = `<i class="fas fa-play"></i>`;
-            if (canvas && asset.procData) {
-                window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+            if (btnPlay) btnPlay.innerHTML = `<i class="fas fa-play"></i>`;
+            if (timeCurrent) timeCurrent.textContent = "00:00.00";
+            if (asset.procData) {
+                if (canvas) {
+                    window.audioEngine.drawWaveform(canvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+                }
+                if (mainCanvas) {
+                    window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+                }
             }
-            if (mainCanvas && asset.procData) {
-                window.audioEngine.drawWaveform(mainCanvas, asset.procData.waveform, 0, asset.procData.silenceStartSec, asset.procData.silenceEndSec, asset.procData.duration);
+        };
+
+        // Cache check
+        if (!asset.procData) {
+            var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
+            if (cached) {
+                asset.procData = cached;
+                if (timeTotal) timeTotal.textContent = this.formatTimePrecise(cached.duration);
+            } else {
+                window.audioEngine.decodeAudioFile(asset.path).then(buf => {
+                    var proc = window.audioEngine.processAudioBuffer(buf);
+                    window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
+                    asset.procData = proc;
+                    if (timeTotal) timeTotal.textContent = this.formatTimePrecise(proc.duration);
+                    if (playerSubtitle) playerSubtitle.textContent = `Max Peak: ${proc.nativePeakDb} dB | Duração: ${this.formatTimePrecise(proc.duration)}`;
+                }).catch(() => {});
             }
-        }, startPercent);
+        } else {
+            if (timeTotal) timeTotal.textContent = this.formatTimePrecise(asset.procData.duration);
+        }
+
+        window.audioEngine.playAudioPreview(asset.path, this.pitchSemitones, this.isReverse, onProgress, onEnded, startPercent);
     }
 
+    /**
+     * Cut Silence, Apply Max Peak Normalization & OVERWRITE Original File on Disk
+     * Completely eliminates any temporary / lost files!
+     */
+    async overwriteSelectedAsset() {
+        var asset = this.selectedAsset;
+        if (!asset || asset.type !== 'sfx') {
+            alert("Selecione um efeito sonoro primeiro para cortar o silêncio e ajustar o Max Peak.");
+            return;
+        }
+
+        var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
+        var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
+        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
+        if (selectMaxPeakPlayer) {
+            targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
+        }
+
+        var msg = `Deseja cortar o silêncio e normalizar o Max Peak para ${targetMaxPeak} dB SOBRESCREVENDO o arquivo original no seu disco?\n\nArquivo: ${asset.path}\n\nO arquivo original será modificado permanentemente (nenhum arquivo temporário será usado).`;
+        if (!confirm(msg)) return;
+
+        var btnOverwrite = document.getElementById('btn-overwrite-cut-peak');
+        if (btnOverwrite) btnOverwrite.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sobrescrevendo...`;
+
+        try {
+            window.audioEngine.stopAudioPreview();
+            var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
+            
+            asset.path = res.targetPath;
+            asset.procData = res.procInfo;
+            asset.mtime = Date.now();
+            if (typeof require !== 'undefined') {
+                asset.name = require('path').basename(res.targetPath);
+            }
+
+            // Update scanned index in cache
+            window.cacheMgr.setScannedIndex(this.allAssets);
+
+            this.selectAndDrawPlayerAsset(asset);
+            this.renderCurrentView();
+            this.showNotification(`✨ Arquivo "${asset.name}" sobrescrito e salvo com sucesso no disco!`);
+        } catch (err) {
+            alert("Erro ao sobrescrever arquivo: " + err.message);
+        } finally {
+            if (btnOverwrite) btnOverwrite.innerHTML = `<i class="fas fa-bolt"></i> Sobrescrever Arquivo Original`;
+        }
+    }
+
+    /**
+     * Insert asset directly to Premiere Pro Timeline (Using Original Persistent File)
+     */
     async insertToTimeline(asset) {
+        if (!asset) return;
+
         var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
         var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
         if (selectMaxPeakPlayer) {
@@ -1362,16 +1219,24 @@ class ComposerApp {
 
         var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
 
-        // Generate audio file with Pitch, Reverse & Max Peak PCM Normalization applied
-        var insertPath = asset.path;
-        if (asset.type === 'sfx') {
+        // Check if Auto Cut Silence is enabled
+        var autoCut = window.cacheMgr.getSetting('autoCutSilence', false);
+        var insertPath = asset.path; // ALWAYS insert the permanent file path on disk!
+
+        if (autoCut && asset.type === 'sfx') {
             try {
-                insertPath = await window.audioEngine.generateProcessedWAV(asset.path, this.pitchSemitones, this.isReverse, targetMaxPeak);
-            } catch (eProc) {
-                console.error("Error generating processed WAV:", eProc);
+                var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
+                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
+                insertPath = res.targetPath;
+                asset.path = res.targetPath;
+                asset.procData = res.procInfo;
+                asset.mtime = Date.now();
+            } catch (eAutoCut) {
+                console.warn("Auto cut silence error:", eAutoCut);
             }
         }
 
+        // Call Premiere Pro ExtendScript with the real permanent file path
         var scriptCall = `ComposerHost.importAndInsertAsset(${JSON.stringify(insertPath)}, ${JSON.stringify(asset.type)}, ${targetMaxPeak}, ${nativePeak}, 0, false)`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
@@ -1401,6 +1266,14 @@ class ComposerApp {
         var m = Math.floor(sec / 60);
         var s = Math.floor(sec % 60);
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    formatTimePrecise(sec) {
+        if (!sec || isNaN(sec)) return "00:00.00";
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        var ms = Math.floor((sec % 1) * 100);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
     }
 }
 
