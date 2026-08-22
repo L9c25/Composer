@@ -90,18 +90,89 @@ class ComposerApp {
             });
         }
 
-        // Spacebar Keyboard Listener for instant Play/Pause
+        // Keyboard Shortcuts (Space: Play/Pause, Up/Down: Navigate Items, Enter: Insert to Timeline)
         window.addEventListener('keydown', (e) => {
+            var activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (activeTag === 'input' || activeTag === 'textarea') {
+                return;
+            }
+
             if (e.code === 'Space' || e.key === ' ') {
-                var activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-                if (activeTag !== 'input' && activeTag !== 'textarea') {
+                e.preventDefault();
+                this.togglePlayPause();
+            } else if (e.key === 'ArrowUp' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                this.navigateByArrow(-1);
+            } else if (e.key === 'ArrowDown' || e.code === 'ArrowDown') {
+                e.preventDefault();
+                this.navigateByArrow(1);
+            } else if (e.key === 'Enter' || e.code === 'Enter') {
+                if (this.selectedAsset) {
                     e.preventDefault();
-                    this.togglePlayPause();
+                    this.insertToTimeline(this.selectedAsset);
                 }
             }
         });
 
         this.renderFoldersList();
+    }
+
+    /**
+     * Navigate up or down in the current view using Arrow Keys
+     */
+    navigateByArrow(direction) {
+        var container = document.getElementById('grid-assets');
+        if (!container) return;
+
+        // Find all visible selectable file rows in the DOM
+        var visibleFileRows = Array.from(container.querySelectorAll('.composer-tree-row.file-row, .asset-list-row:not(.folder-list-row), .asset-card'));
+        if (visibleFileRows.length === 0) return;
+
+        // Find current selected index
+        var currentIndex = -1;
+        if (this.selectedAsset) {
+            var selPathNorm = this.selectedAsset.path.replace(/\\/g, '/').toLowerCase();
+            currentIndex = visibleFileRows.findIndex(row => {
+                var p = row.getAttribute('data-file-path') || row.getAttribute('data-path');
+                if (p) {
+                    var decoded = decodeURIComponent(p).replace(/\\/g, '/').toLowerCase();
+                    return decoded === selPathNorm;
+                }
+                return false;
+            });
+        }
+
+        var newIndex = currentIndex + direction;
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex >= visibleFileRows.length) newIndex = visibleFileRows.length - 1;
+
+        if (newIndex === currentIndex && currentIndex !== -1) return;
+
+        var targetRow = visibleFileRows[newIndex];
+        if (!targetRow) return;
+
+        var rawPath = targetRow.getAttribute('data-file-path') || targetRow.getAttribute('data-path');
+        if (!rawPath) return;
+
+        var targetPath = decodeURIComponent(rawPath);
+        var targetAsset = this.allAssets.find(a => a.path === targetPath);
+        if (!targetAsset) return;
+
+        // Highlight new row
+        visibleFileRows.forEach(r => r.classList.remove('selected'));
+        targetRow.classList.add('selected');
+
+        // Smoothly scroll target row into view
+        targetRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+        // Select and draw asset in bottom player
+        this.selectedAsset = targetAsset;
+        this.selectAndDrawPlayerAsset(targetAsset);
+
+        // Autoplay preview on arrow navigate if it's audio
+        if (targetAsset.type === 'sfx') {
+            this.playAudioPreview(targetAsset, null, null, 0);
+        }
     }
 
     /**
