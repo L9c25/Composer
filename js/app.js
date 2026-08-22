@@ -1191,53 +1191,13 @@ class ComposerApp {
     }
 
     /**
-     * Insert asset directly to Premiere Pro Timeline (Using Original Persistent File)
+     * Insert asset directly to Premiere Pro Timeline (Clean Import without silence cut or peak change)
      */
     async insertToTimeline(asset) {
         if (!asset) return;
 
-        var targetMaxPeak = window.cacheMgr.getSetting('targetMaxPeakDb', -6.0);
-        var selectMaxPeakPlayer = document.getElementById('select-max-peak-player');
-        if (selectMaxPeakPlayer) {
-            targetMaxPeak = parseFloat(selectMaxPeakPlayer.value);
-        }
-
-        // Ensure procData and nativePeakDb are computed prior to script call
-        if (!asset.procData && asset.type === 'sfx') {
-            var cached = window.cacheMgr.getAudioCache(asset.path, asset.mtime);
-            if (cached) {
-                asset.procData = cached;
-            } else {
-                try {
-                    var audioBuf = await window.audioEngine.decodeAudioFile(asset.path);
-                    var proc = window.audioEngine.processAudioBuffer(audioBuf);
-                    window.cacheMgr.setAudioCache(asset.path, asset.mtime, proc);
-                    asset.procData = proc;
-                } catch (e) {}
-            }
-        }
-
-        var nativePeak = (asset.procData && asset.procData.nativePeakDb !== undefined) ? asset.procData.nativePeakDb : -6.0;
-
-        // Check if Auto Cut Silence is enabled
-        var autoCut = window.cacheMgr.getSetting('autoCutSilence', false);
-        var insertPath = asset.path; // ALWAYS insert the permanent file path on disk!
-
-        if (autoCut && asset.type === 'sfx') {
-            try {
-                var thresh = window.cacheMgr.getSetting('silenceThresholdDb', -45.0);
-                var res = await window.audioEngine.cutSilenceAndReplaceFile(asset.path, thresh, targetMaxPeak);
-                insertPath = res.targetPath;
-                asset.path = res.targetPath;
-                asset.procData = res.procInfo;
-                asset.mtime = Date.now();
-            } catch (eAutoCut) {
-                console.warn("Auto cut silence error:", eAutoCut);
-            }
-        }
-
         // Call Premiere Pro ExtendScript with the real permanent file path
-        var scriptCall = `ComposerHost.importAndInsertAsset(${JSON.stringify(insertPath)}, ${JSON.stringify(asset.type)}, ${targetMaxPeak}, ${nativePeak}, 0, false)`;
+        var scriptCall = `ComposerHost.importAndInsertAsset(${JSON.stringify(asset.path)}, ${JSON.stringify(asset.type)})`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
             try {

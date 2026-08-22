@@ -104,9 +104,8 @@ var ComposerHost = {
 
     /**
      * Import asset to Project Bin and insert into Active Sequence at Playhead (CTI)
-     * Applies Audio Gain Normalization automatically if audio.
      */
-    importAndInsertAsset: function(filePath, mediaType, targetMaxPeakDb, nativePeakDb, pitchSemitones, isReverse) {
+    importAndInsertAsset: function(filePath, mediaType) {
         try {
             if (!app.project) {
                 return JSON.stringify({ success: false, error: "Nenhum projeto aberto no Premiere Pro." });
@@ -130,27 +129,9 @@ var ComposerHost = {
                 return JSON.stringify({ success: false, error: "Falha ao importar arquivo no Premiere Pro." });
             }
 
-            var gainOffsetDb = 0;
-            var applyGain = false;
-            if (mediaType === "sfx" && targetMaxPeakDb !== null && nativePeakDb !== null && !isNaN(targetMaxPeakDb) && !isNaN(nativePeakDb)) {
-                gainOffsetDb = parseFloat(targetMaxPeakDb) - parseFloat(nativePeakDb);
-                applyGain = true;
-            }
-
             // Force Premiere Pro to refresh media cache for this item
             if (typeof projectItem.refreshMedia === "function") {
                 try { projectItem.refreshMedia(); } catch (eRef) {}
-            }
-
-            // Apply gain to project item if supported
-            if (applyGain) {
-                try {
-                    if (typeof projectItem.setAudioGain === "function") {
-                        projectItem.setAudioGain(gainOffsetDb, 0);
-                    } else if (typeof projectItem.setGain === "function") {
-                        projectItem.setGain(gainOffsetDb);
-                    }
-                } catch (eGain) {}
             }
 
             // Get Current Time Indicator (Playhead position)
@@ -198,61 +179,10 @@ var ComposerHost = {
                 return JSON.stringify({ success: false, error: "Não foi possível posicionar o clipe na timeline do Premiere Pro." });
             }
 
-            // Apply Volume Gain Normalization to inserted track clip item in timeline
-            if (mediaType === "sfx" && applyGain) {
-                try {
-                    var targetPathNorm = (filePath || "").replace(/\\/g, '/').toLowerCase();
-                    var clips = targetTrack.clips;
-
-                    for (var c = 0; c < clips.numItems; c++) {
-                        var clipItem = clips[c];
-                        var isMatch = false;
-
-                        if (clipItem.projectItem && typeof clipItem.projectItem.getMediaPath === "function") {
-                            var mediaP = (clipItem.projectItem.getMediaPath() || "").replace(/\\/g, '/').toLowerCase();
-                            if (mediaP === targetPathNorm) {
-                                isMatch = true;
-                            }
-                        }
-
-                        if (!isMatch && clipItem.start && Math.abs(clipItem.start.seconds - cti.seconds) < 0.3) {
-                            isMatch = true;
-                        }
-
-                        if (isMatch) {
-                            try {
-                                if (typeof clipItem.setAudioGain === "function") {
-                                    clipItem.setAudioGain(gainOffsetDb);
-                                }
-                            } catch (eAudioGain) {}
-
-                            try {
-                                if (clipItem.components) {
-                                    for (var compIdx = 0; compIdx < clipItem.components.numItems; compIdx++) {
-                                        var comp = clipItem.components[compIdx];
-                                        if (comp.matchName === "AE.ADBE Volume" || comp.displayName === "Volume" || comp.displayName === "Áudio Volume") {
-                                            if (comp.properties && comp.properties.numItems > 0) {
-                                                var volProp = comp.properties[0];
-                                                if (volProp) {
-                                                    volProp.setValue(gainOffsetDb, true);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (eVolComp) {}
-                            
-                            break; // Stop after updating the inserted clip!
-                        }
-                    }
-                } catch (eClipGain) {}
-            }
-
             return JSON.stringify({
                 success: true,
                 insertedToSequence: true,
-                gainAppliedDb: applyGain ? gainOffsetDb.toFixed(2) : 0,
-                message: applyGain ? "Inserido com sucesso! Ganho aplicado: " + gainOffsetDb.toFixed(1) + " dB" : "Inserido com sucesso na timeline!"
+                message: "Inserido com sucesso na timeline!"
             });
 
         } catch (err) {
