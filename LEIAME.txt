@@ -1,0 +1,25 @@
+======================================================================
+     PREMIERE COMPOSER FX STUDIO - PACOTE DE INSTALACAO (v26.3.2)
+======================================================================
+
+COMO INSTALAR NO ADOBE PREMIERE PRO v26.3.2 (2026):
+
+PASSO 1:
+Certifique-se de que o Premiere Pro esta FECHADO.
+
+PASSO 2:
+De um duplo clique no arquivo "install.bat" presente nesta pasta.
+
+PASSO 3:
+Apos a mensagem de instalacao concluida com sucesso, abra o Premiere Pro v26.3.2.
+
+PASSO 4:
+No menu superior do Premiere Pro, va em:
+Janela (Window) -> Extensoes (Extensions) -> Premiere Composer FX Studio.
+
+----------------------------------------------------------------------
+OUTROS ARQUIVOS UTEIS:
+- setup_dev_link.bat: Cria vinculo direto com esta pasta para desenvolvedores.
+- uninstall.bat: Desinstala e remove a extensao do Premiere.
+- INSTALL_GUIDE.md: Guia detalhado com explicacoes sobre cada recurso.
+======================================================================

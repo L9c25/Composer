@@ -23,7 +23,8 @@ set "TARGET_DIR=%APPDATA%\Adobe\CEP\extensions\com.composer.fxstudio"
 echo [2/3] Preparando pasta de destino CEP:
 echo       %TARGET_DIR%
 if not exist "%APPDATA%\Adobe\CEP\extensions" mkdir "%APPDATA%\Adobe\CEP\extensions"
-if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
+if exist "%TARGET_DIR%" rmdir /S /Q "%TARGET_DIR%" >nul 2>&1
+mkdir "%TARGET_DIR%"
 
 :: 3. Copiar arquivos da extensao
 echo [3/3] Instalando e copiando arquivos da versao 26.3.2...
