@@ -1440,8 +1440,24 @@ class ComposerApp {
         var normalizedPath = asset.path.replace(/\\/g, '/');
         var assetType = asset.type || (normalizedPath.match(/\.(wav|mp3|m4a|aac|flac|ogg|aiff)$/i) ? 'sfx' : 'overlay');
 
+        // Extract duration from procData or cache
+        var assetDuration = 0;
+        if (asset.procData && typeof asset.procData.duration === 'number' && asset.procData.duration > 0) {
+            assetDuration = asset.procData.duration;
+        } else {
+            var cached = window.cacheMgr.getAudioCache(asset.path);
+            if (cached && typeof cached.duration === 'number' && cached.duration > 0) {
+                assetDuration = cached.duration;
+            } else {
+                var overlayCached = window.cacheMgr.getOverlayCache(asset.path);
+                if (overlayCached && typeof overlayCached.duration === 'number' && overlayCached.duration > 0) {
+                    assetDuration = overlayCached.duration;
+                }
+            }
+        }
+
         var encodedPath = encodeURIComponent(normalizedPath);
-        var scriptCall = `ComposerHost.importAndInsertAsset(decodeURIComponent("${encodedPath}"), "${assetType}")`;
+        var scriptCall = `ComposerHost.importAndInsertAsset(decodeURIComponent("${encodedPath}"), "${assetType}", ${assetDuration || 0})`;
         
         this.csInterface.evalScript(scriptCall, (resultStr) => {
             try {

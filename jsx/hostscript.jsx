@@ -90,17 +90,18 @@ var ComposerHost = {
     },
 
     /**
-     * Find best target track or create a new one
+     * Find best target track or create a new one, ensuring the entire clip duration fits without collisions
      */
-    findOrCreateTargetTrack: function(activeSeq, isAudio, cti) {
+    findOrCreateTargetTrack: function(activeSeq, isAudio, cti, assetDurationSec) {
         var tracks = isAudio ? activeSeq.audioTracks : activeSeq.videoTracks;
         if (!tracks || tracks.numTracks === 0) return { track: null, index: 0 };
 
         var numTracks = tracks.numTracks;
         var ctiSec = (cti && typeof cti.seconds === "number") ? cti.seconds : 0;
+        var durSec = (typeof assetDurationSec === "number" && assetDurationSec > 0) ? assetDurationSec : 0.5;
 
         // 1. Scan tracks top-down (0 to numTracks - 1) to find the first unlocked track
-        // that is free (no clip overlapping) at the current playhead (CTI) position.
+        // that has enough continuous free space from ctiSec to (ctiSec + durSec) without colliding with existing clips.
         for (var j = 0; j < numTracks; j++) {
             var tCandidate = tracks[j];
             var isCandidateLocked = false;
@@ -115,8 +116,10 @@ var ComposerHost = {
                     if (clip && clip.start && clip.end) {
                         var startSec = clip.start.seconds;
                         var endSec = clip.end.seconds;
-                        // If playhead falls within this clip's range
-                        if (ctiSec >= startSec && ctiSec < (endSec - 0.001)) {
+                        
+                        // Check if the clip overlaps the time range [ctiSec, ctiSec + durSec]
+                        // Overlap condition: start < (ctiSec + durSec) AND end > ctiSec
+                        if (startSec < (ctiSec + durSec - 0.001) && endSec > (ctiSec + 0.001)) {
                             isOccupied = true;
                             break;
                         }
@@ -124,13 +127,13 @@ var ComposerHost = {
                 }
             }
 
-            // Found highest available track free at CTI
+            // Found highest available track where the full clip fits
             if (!isOccupied) {
                 return { track: tCandidate, index: j };
             }
         }
 
-        // 2. If all existing unlocked tracks are occupied at CTI, create a NEW track
+        // 2. If all existing unlocked tracks are occupied or don't fit at [ctiSec, ctiSec + durSec], create a NEW track
         try {
             app.enableQE();
             if (typeof qe !== "undefined" && qe.project) {
@@ -160,7 +163,7 @@ var ComposerHost = {
      * Import asset to Project Bin and insert into Active Sequence at Playhead (CTI)
      * Resilient multi-strategy insertion for Premiere Pro v26.3.2 (2026)
      */
-    importAndInsertAsset: function(rawFilePath, mediaType) {
+    importAndInsertAsset: function(rawFilePath, mediaType, assetDurationSec) {
         try {
             if (!app.project) {
                 return JSON.stringify({ success: false, error: "Nenhum projeto aberto no Premiere Pro." });
@@ -262,8 +265,26 @@ var ComposerHost = {
             var cti = activeSeq.getPlayerPosition();
             var ctiSec = (cti && typeof cti.seconds === "number") ? cti.seconds : 0;
 
-            // 5. Select Best Available Track
-            var targetTrackInfo = this.findOrCreateTargetTrack(activeSeq, isAudio, cti);
+            // Calculate effective duration of the asset
+            var effectiveDuration = (typeof assetDurationSec === "number" && assetDurationSec > 0) ? assetDurationSec : 0;
+            if (!effectiveDuration && projectItem) {
+                try {
+                    if (typeof projectItem.getOutPoint === "function") {
+                        var outP = projectItem.getOutPoint();
+                        if (outP && typeof outP.seconds === "number" && outP.seconds > 0) {
+                            var inP = (typeof projectItem.getInPoint === "function") ? projectItem.getInPoint() : null;
+                            var inSec = (inP && typeof inP.seconds === "number") ? inP.seconds : 0;
+                            effectiveDuration = outP.seconds - inSec;
+                        }
+                    }
+                } catch (eDur) {}
+            }
+            if (!effectiveDuration || effectiveDuration <= 0) {
+                effectiveDuration = 0.5;
+            }
+
+            // 5. Select Best Available Track that fits the clip
+            var targetTrackInfo = this.findOrCreateTargetTrack(activeSeq, isAudio, cti, effectiveDuration);
             var targetTrack = targetTrackInfo.track;
             var targetIndex = targetTrackInfo.index;
 
