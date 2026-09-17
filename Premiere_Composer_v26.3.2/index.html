@@ -96,12 +96,38 @@
                         <input type="number" id="input-silence-thresh" class="num-input" min="-80" max="-10" step="1"
                             value="-45">
                     </div>
+                <div class="sidebar-update-action" style="padding-top: 10px; border-top: 1px solid var(--border-color); margin-top: 8px;">
+                    <button class="btn-check-updates" id="btn-check-updates" title="Checar se há nova versão no GitHub">
+                        <i class="fas fa-sync-alt"></i> <span>Verificar Atualizações</span>
+                    </button>
                 </div>
             </div>
         </aside>
 
         <!-- Main Content View -->
         <main class="main-content">
+            <!-- Update Notification Banner (1-Click Auto-Updater) -->
+            <div class="update-notification-banner" id="update-notification-banner" style="display: none;">
+                <div class="update-banner-left">
+                    <i class="fas fa-rocket update-banner-icon"></i>
+                    <div class="update-banner-content">
+                        <div class="update-banner-title">
+                            <span>Nova atualização disponível!</span>
+                            <span class="update-banner-sha" id="update-banner-sha"></span>
+                        </div>
+                        <div class="update-banner-desc" id="update-banner-text">Nova versão com melhorias e correções.</div>
+                    </div>
+                </div>
+                <div class="update-banner-actions">
+                    <button class="btn-update-now" id="btn-update-now" title="Baixar e aplicar atualização com 1 clique">
+                        <i class="fas fa-arrow-alt-circle-up"></i> Atualizar Agora
+                    </button>
+                    <button class="btn-update-dismiss" id="btn-dismiss-update" title="Fechar aviso">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
             <!-- Top Search Header -->
             <header class="top-header">
                 <button class="btn-sidebar-expand" id="btn-expand-sidebar" title="Expandir Barra Lateral"
@@ -255,6 +281,7 @@
     <script src="js/cache-manager.js"></script>
     <script src="js/audio-engine.js"></script>
     <script src="js/overlay-engine.js"></script>
+    <script src="js/updater.js"></script>
     <script src="js/app.js"></script>
 </body>
 

@@ -29,6 +29,12 @@ class ComposerApp {
         this.bindEvents();
         this.bindSidebarCollapsibles();
         this.loadInitialFolders();
+
+        // Initialize GitHub Auto-Updater
+        if (typeof UpdaterManager !== 'undefined') {
+            window.updaterMgr = new UpdaterManager(this);
+            window.updaterMgr.init();
+        }
     }
 
     initUI() {
