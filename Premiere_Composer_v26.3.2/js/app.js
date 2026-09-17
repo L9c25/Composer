@@ -1000,6 +1000,8 @@ class ComposerApp {
             return;
         }
 
+        var anyFolderRenderedExpanded = false;
+
         var buildComposerTreeNode = (dirPath, level = 0) => {
             var normDir = this.normalizePath(dirPath);
             var normDirLower = normDir.toLowerCase();
@@ -1059,6 +1061,7 @@ class ComposerApp {
             `;
 
             if (isExpanded) {
+                anyFolderRenderedExpanded = true;
                 html += `<div class="composer-tree-children">`;
 
                 if (!hasChildren) {
@@ -1103,17 +1106,21 @@ class ComposerApp {
             return html;
         };
 
-        var htmlTree = `<div class="composer-tree-inner">` + userFolders.map(fPath => buildComposerTreeNode(fPath, 0)).join('') + `</div>`;
+        var htmlTreeNodes = userFolders.map(fPath => buildComposerTreeNode(fPath, 0)).join('');
+        var htmlTree = `<div class="composer-tree-inner">` + htmlTreeNodes + `</div>`;
         
-        // Add Bottom Folder Management Bar (ALWAYS PRESENT!)
+        // Add Bottom Folder Management Bar: Excluir Pasta only shows when all folders are minimized
+        var isAllMinimized = !anyFolderRenderedExpanded;
         htmlTree += `
             <div class="composer-tree-actions-bar">
                 <button class="btn-tree-action" id="btn-tree-add-folder" title="Adicionar Nova Pasta de Áudio/Vídeo">
                     <i class="fas fa-folder-plus"></i> + Adicionar Pasta
                 </button>
+                ${isAllMinimized ? `
                 <button class="btn-tree-action danger" id="btn-tree-remove-folder" title="Excluir/Remover Pasta Monitorada">
                     <i class="fas fa-trash-alt"></i> Excluir Pasta
                 </button>
+                ` : ''}
             </div>
         `;
 
@@ -1164,9 +1171,16 @@ class ComposerApp {
                 this._userToggledNodes.add(normDir);
 
                 if (this.expandedMainTreeNodes.has(normDir)) {
-                    this.expandedMainTreeNodes.delete(normDir);
-                    if (this._preSearchExpandedNodes) {
-                        this._preSearchExpandedNodes.delete(normDir);
+                    var normDirLower = normDir.toLowerCase();
+                    var normDirPrefix = normDirLower + '/';
+                    for (let node of Array.from(this.expandedMainTreeNodes)) {
+                        var nodeLower = node.toLowerCase();
+                        if (nodeLower === normDirLower || nodeLower.startsWith(normDirPrefix)) {
+                            this.expandedMainTreeNodes.delete(node);
+                            if (this._preSearchExpandedNodes) {
+                                this._preSearchExpandedNodes.delete(node);
+                            }
+                        }
                     }
                 } else {
                     this.expandedMainTreeNodes.add(normDir);
