@@ -1109,20 +1109,20 @@ class ComposerApp {
         var htmlTreeNodes = userFolders.map(fPath => buildComposerTreeNode(fPath, 0)).join('');
         var htmlTree = `<div class="composer-tree-inner">` + htmlTreeNodes + `</div>`;
         
-        // Add Bottom Folder Management Bar: Excluir Pasta only shows when all folders are minimized
+        // Add Bottom Folder Management Bar: Only shows when all folders are minimized
         var isAllMinimized = !anyFolderRenderedExpanded;
-        htmlTree += `
-            <div class="composer-tree-actions-bar">
-                <button class="btn-tree-action" id="btn-tree-add-folder" title="Adicionar Nova Pasta de Áudio/Vídeo">
-                    <i class="fas fa-folder-plus"></i> + Adicionar Pasta
-                </button>
-                ${isAllMinimized ? `
-                <button class="btn-tree-action danger" id="btn-tree-remove-folder" title="Excluir/Remover Pasta Monitorada">
-                    <i class="fas fa-trash-alt"></i> Excluir Pasta
-                </button>
-                ` : ''}
-            </div>
-        `;
+        if (isAllMinimized) {
+            htmlTree += `
+                <div class="composer-tree-actions-bar">
+                    <button class="btn-tree-action" id="btn-tree-add-folder" title="Adicionar Nova Pasta de Áudio/Vídeo">
+                        <i class="fas fa-folder-plus"></i> + Adicionar Pasta
+                    </button>
+                    <button class="btn-tree-action danger" id="btn-tree-remove-folder" title="Excluir/Remover Pasta Monitorada">
+                        <i class="fas fa-trash-alt"></i> Excluir Pasta
+                    </button>
+                </div>
+            `;
+        }
 
         var savedScroll = container.scrollTop;
         var contentBody = document.querySelector('.content-body');
